@@ -11,12 +11,16 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
 
 def bootstrap_clang_module():
-    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons."""
+    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons.
+
+    @return None.
+    """
     try:
         import clang.cindex as _ci  # noqa: F401
 
@@ -38,11 +42,29 @@ def bootstrap_clang_module():
 
 
 bootstrap_clang_module()
-from clang.cindex import Config, CursorKind, Index, LibclangError, TypeKind  # noqa: E402
+from clang.cindex import (  # noqa: E402
+    Config,
+    CursorKind,
+    Diagnostic,
+    Index,
+    LibclangError,
+    TypeKind,
+)
+
+_STD_PROBE_SRC = (
+    "#include <stddef.h>\n"
+    "#include <stdint.h>\n"
+    "typedef size_t fortran_orm_probe_size_t;\n"
+    "typedef int8_t fortran_orm_probe_i8_t;\n"
+    "typedef uint64_t fortran_orm_probe_u64_t;\n"
+)
 
 
 def configure_libclang():
-    """Locate and initialize libclang across macOS, Linux, and Windows."""
+    """Locate and initialize libclang across macOS, Linux, and Windows.
+
+    @return None.
+    """
     try:
         _ = Config().lib
         return
@@ -80,6 +102,82 @@ def configure_libclang():
                 return
             except (LibclangError, OSError):
                 continue
+
+
+def _can_parse_std_headers(idx, clang_args):
+    """Test whether `idx` resolves `<stddef.h>` and `<stdint.h>` cleanly.
+
+    @param idx Active `clang.cindex.Index` instance.
+    @param clang_args Candidate compiler arguments.
+    @return `True` when zero error/fatal diagnostics occur, `False` otherwise.
+    """
+    probe_file = "__fortran_orm_ir_probe.c"
+    try:
+        tu = idx.parse(
+            probe_file,
+            args=clang_args,
+            unsaved_files=[(probe_file, _STD_PROBE_SRC)],
+        )
+    except (LibclangError, OSError):
+        return False
+    return not any(d.severity >= Diagnostic.Error for d in tu.diagnostics)
+
+
+def resolve_resource_dir_args(idx, base_args):
+    """Ensure `<stddef.h>` and `<stdint.h>` resolve cleanly via `-resource-dir`.
+
+    @param idx Active `clang.cindex.Index` instance.
+    @param base_args Base compiler arguments prior to resource-dir fallback.
+    @return Validated list of compiler arguments for `Index.parse`.
+    """
+    if _can_parse_std_headers(idx, base_args):
+        return base_args
+
+    raw = []
+    clang_bin = shutil.which("clang")
+    if clang_bin:
+        try:
+            res_dir = subprocess.check_output(
+                [clang_bin, "-print-resource-dir"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if res_dir:
+                raw.append(res_dir)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+    glob_hits = []
+    for pat in (
+        "/usr/lib/llvm-*/lib/clang/*",
+        "/usr/lib/clang/*",
+        "/opt/homebrew/opt/llvm/lib/clang/*",
+        "/opt/homebrew/Cellar/llvm*/*/lib/clang/*",
+        "/usr/local/opt/llvm*/lib/clang/*",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/*",
+        "/Library/Developer/CommandLineTools/usr/lib/clang/*",
+    ):
+        glob_hits.extend(glob.glob(pat))
+    raw.extend(
+        sorted(
+            glob_hits,
+            key=lambda s: ([int(x) for x in re.findall(r"\d+", s)], s),
+            reverse=True,
+        )
+    )
+
+    seen = set()
+    for cand in raw:
+        norm = os.path.abspath(cand)
+        if norm in seen or not os.path.isfile(
+            os.path.join(norm, "include", "stddef.h")
+        ):
+            continue
+        seen.add(norm)
+        trial = base_args + [f"-resource-dir={norm}"]
+        if _can_parse_std_headers(idx, trial):
+            return trial
+    return base_args
 
 
 # cdd_ffi_node_kind_t
@@ -140,7 +238,11 @@ RAW_ARRAY_PARAMS = {
 
 
 def clean_doc(raw_comment):
-    """Strip C Doxygen comment delimiters into clean multi-line prose."""
+    """Strip C Doxygen comment delimiters into clean multi-line prose.
+
+    @param raw_comment Raw Doxygen comment text attached to a libclang cursor.
+    @return Cleaned multi-line comment string, or `None` if empty.
+    """
     if not raw_comment:
         return None
     lines = []
@@ -161,7 +263,13 @@ def clean_doc(raw_comment):
 
 
 def map_clang_type(ctype, known_structs, known_enums):
-    """Map a libclang Type into a cdd_ffi_type_t dictionary."""
+    """Map a libclang `Type` into a `cdd_ffi_type_t` dictionary.
+
+    @param ctype Source `clang.cindex.Type` object.
+    @param known_structs Set of concrete POD struct names defined in `include/`.
+    @param known_enums Set of enum names defined in `include/`.
+    @return Normalized `cdd_ffi_type_t` dictionary.
+    """
     pointer_depth = 0
     array_size = 0
     is_const = 0
@@ -237,7 +345,11 @@ def map_clang_type(ctype, known_structs, known_enums):
 
 
 def extract_param_intents(raw_doc):
-    """Parse @param[in|out|in,out] annotations from a function docstring."""
+    """Parse `@param[in|out|in,out]` annotations from a function docstring.
+
+    @param raw_doc Raw Doxygen comment string on the C function declaration.
+    @return Mapping from parameter name to `INTENT_IN`/`INTENT_OUT`/`INTENT_INOUT`.
+    """
     intents = {}
     if not raw_doc:
         return intents
@@ -255,10 +367,15 @@ def extract_param_intents(raw_doc):
 
 
 def extract_ir(header_path, include_dir):
-    """Extract normalized cdd-c FFI IR dictionary from fortran-orm headers."""
+    """Extract normalized `cdd-c` FFI IR dictionary from `fortran-orm` headers.
+
+    @param header_path Path to the umbrella C89 header (`fortran_orm_ffi.h`).
+    @param include_dir Public header directory path (`include`).
+    @return Dictionary conforming to `cdd-c` normalized FFI IR JSON schema.
+    """
     configure_libclang()
     idx = Index.create()
-    clang_args = ["-std=c90", f"-I{include_dir}", "-fparse-all-comments"]
+    clang_args = ["-std=c90", "-x", "c", f"-I{include_dir}", "-fparse-all-comments"]
     if sys.platform == "darwin":
         try:
             sdk = subprocess.check_output(
@@ -269,7 +386,16 @@ def extract_ir(header_path, include_dir):
         except (subprocess.SubprocessError, OSError):
             pass
 
+    clang_args = resolve_resource_dir_args(idx, clang_args)
     tu = idx.parse(header_path, args=clang_args)
+    parse_errs = [
+        str(diag) for diag in tu.diagnostics if diag.severity >= Diagnostic.Error
+    ]
+    if parse_errs:
+        for msg in parse_errs:
+            print(f"{header_path}: clang parse error: {msg}", file=sys.stderr)
+        raise RuntimeError(f"libclang failed to parse {header_path}")
+
     inc_abs = os.path.abspath(include_dir)
 
     nodes = []
@@ -427,7 +553,10 @@ def extract_ir(header_path, include_dir):
 
 
 def main():
-    """CLI entry point for header_to_cdd_ir.py."""
+    """CLI entry point for `header_to_cdd_ir.py`.
+
+    @return Process exit code (`0` on success).
+    """
     parser = argparse.ArgumentParser(
         description="Extract cdd-c FFI IR JSON from fortran-orm C89 headers."
     )

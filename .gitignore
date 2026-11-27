@@ -20,6 +20,8 @@ compile_commands.json
 docs/html/
 docs/xml/
 .coverage
+__pycache__/
+*.py[cod]
 *.db
 *.sqlite
 *.sqlite3

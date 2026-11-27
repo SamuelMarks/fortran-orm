@@ -11,20 +11,24 @@ import argparse
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 
 def bootstrap_clang_module():
-    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons."""
+    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons.
+
+    @return None.
+    """
     try:
         import clang.cindex as _ci  # noqa: F401
 
         return
     except ModuleNotFoundError:
         py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
-        search_Site = []
+        search_sites = []
         for pat in (
             f"/opt/homebrew/opt/llvm/lib/{py_ver}/site-packages",
             f"/opt/homebrew/Cellar/llvm*/*/lib/{py_ver}/site-packages",
@@ -34,8 +38,8 @@ def bootstrap_clang_module():
             "/usr/local/opt/llvm*/lib/python*/site-packages",
             "/usr/lib/python3/dist-packages",
         ):
-            search_Site.extend(sorted(glob.glob(pat), reverse=True))
-        for sp in search_Site:
+            search_sites.extend(sorted(glob.glob(pat), reverse=True))
+        for sp in search_sites:
             if os.path.isdir(os.path.join(sp, "clang")) and sp not in sys.path:
                 sys.path.append(sp)
 
@@ -50,9 +54,27 @@ from clang.cindex import (  # noqa: E402
     TypeKind,
 )
 
+_STD_PROBE_SRC = (
+    "#include <stddef.h>\n"
+    "#include <stdint.h>\n"
+    "typedef size_t fortran_orm_probe_size_t;\n"
+    "typedef ptrdiff_t fortran_orm_probe_ptrdiff_t;\n"
+    "typedef int8_t fortran_orm_probe_i8_t;\n"
+    "typedef uint8_t fortran_orm_probe_u8_t;\n"
+    "typedef int16_t fortran_orm_probe_i16_t;\n"
+    "typedef uint16_t fortran_orm_probe_u16_t;\n"
+    "typedef int32_t fortran_orm_probe_i32_t;\n"
+    "typedef uint32_t fortran_orm_probe_u32_t;\n"
+    "typedef int64_t fortran_orm_probe_i64_t;\n"
+    "typedef uint64_t fortran_orm_probe_u64_t;\n"
+)
+
 
 def init_libclang():
-    """Locate and initialize libclang shared library across macOS and Linux."""
+    """Locate and initialize libclang shared library across macOS and Linux.
+
+    @return None.
+    """
     try:
         _ = Config().lib
         return
@@ -91,9 +113,138 @@ def init_libclang():
                 continue
 
 
-def collect_clang_args():
-    """Build complete `-I` and sysroot flags for both local and CI FetchContent trees.
+def _version_sort_key(path_str):
+    """Extract numeric version tuple from a toolchain path for descending sort.
 
+    @param path_str Candidate filesystem path containing LLVM/Clang version numbers.
+    @return Tuple of integers suitable for numeric version comparison.
+    """
+    nums = [int(tok) for tok in re.findall(r"\d+", path_str)]
+    return (nums, path_str)
+
+
+def candidate_resource_dirs():
+    """Discover candidate Clang resource directories (`<res_dir>/include/stddef.h`).
+
+    Unlike passing `-isystem <dir>/include` (which prepends a second Clang builtin
+    directory ahead of `libclang`'s own `<resource-dir>/include` and breaks
+    `#include_next <stdint.h>` via `__CLANG_STDINT_H` guard re-entry when multiple
+    LLVM versions are installed), passing `-resource-dir=<res_dir>` replaces
+    Clang's single `ResourceDir` cleanly.
+
+    @return Ordered list of unique Clang resource directory paths.
+    """
+    raw = []
+    if os.environ.get("CLANG_RESOURCE_DIR"):
+        raw.append(os.environ["CLANG_RESOURCE_DIR"])
+
+    clang_bin = shutil.which("clang")
+    if clang_bin:
+        try:
+            res_dir = subprocess.check_output(
+                [clang_bin, "-print-resource-dir"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if res_dir:
+                raw.append(res_dir)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+    glob_hits = []
+    for pat in (
+        "/usr/lib/llvm-*/lib/clang/*",
+        "/usr/lib/clang/*",
+        "/opt/homebrew/opt/llvm/lib/clang/*",
+        "/opt/homebrew/Cellar/llvm*/*/lib/clang/*",
+        "/usr/local/opt/llvm*/lib/clang/*",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/*",
+        "/Library/Developer/CommandLineTools/usr/lib/clang/*",
+    ):
+        glob_hits.extend(glob.glob(pat))
+    raw.extend(sorted(glob_hits, key=_version_sort_key, reverse=True))
+
+    seen = set()
+    valid = []
+    for cand in raw:
+        norm = os.path.abspath(cand)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if os.path.isfile(os.path.join(norm, "include", "stddef.h")):
+            valid.append(norm)
+    return valid
+
+
+def can_parse_std_headers(idx, clang_args):
+    """Verify via in-memory parse that `<stddef.h>` and `<stdint.h>` types resolve.
+
+    @param idx Active `clang.cindex.Index` instance.
+    @param clang_args Candidate compiler arguments passed to `Index.parse`.
+    @return `True` when zero error/fatal diagnostics occur, `False` otherwise.
+    """
+    probe_file = "__fortran_orm_std_probe.c"
+    try:
+        tu = idx.parse(
+            probe_file,
+            args=clang_args,
+            unsaved_files=[(probe_file, _STD_PROBE_SRC)],
+        )
+    except (LibclangError, OSError):
+        return False
+    return not any(d.severity >= Diagnostic.Error for d in tu.diagnostics)
+
+
+def resolve_std_header_args(idx, base_args):
+    """Ensure `<stddef.h>` and `<stdint.h>` resolve cleanly on `idx`.
+
+    Probes `base_args` unmodified first so system `libclang` installations (such
+    as Debian/Ubuntu `python3-clang`) keep their native matched `ResourceDir`
+    untouched. Only when the probe fails (such as standalone PyPI `libclang`
+    wheels lacking bundled builtin headers) does it test `-resource-dir=<dir>`.
+
+    @param idx Active `clang.cindex.Index` instance.
+    @param base_args Base compiler flags prior to resource-directory fallback.
+    @return Validated list of compiler arguments for `Index.parse`.
+    """
+    if can_parse_std_headers(idx, base_args):
+        return base_args
+
+    multiarch_dirs = []
+    if sys.platform.startswith("linux"):
+        cc_bin = shutil.which("gcc") or shutil.which("cc")
+        if cc_bin:
+            try:
+                triplet = subprocess.check_output(
+                    [cc_bin, "-print-multiarch"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+                if triplet and os.path.isdir(f"/usr/include/{triplet}"):
+                    multiarch_dirs.append(f"/usr/include/{triplet}")
+            except (subprocess.SubprocessError, OSError):
+                pass
+        for ma in sorted(glob.glob("/usr/include/*-linux-gnu*")):
+            if os.path.isdir(ma) and ma not in multiarch_dirs:
+                multiarch_dirs.append(ma)
+
+    res_dirs = candidate_resource_dirs()
+    for res_dir in res_dirs:
+        trial = base_args + [f"-resource-dir={res_dir}"]
+        if can_parse_std_headers(idx, trial):
+            return trial
+        for ma_dir in multiarch_dirs:
+            trial_ma = trial + ["-isystem", ma_dir]
+            if can_parse_std_headers(idx, trial_ma):
+                return trial_ma
+
+    return base_args
+
+
+def collect_clang_args(idx):
+    """Build complete `-I`, sysroot, and validated resource-dir flags for libclang.
+
+    @param idx Active `clang.cindex.Index` instance used to validate headers.
     @return List of clang command-line flags for `Index.parse`.
     """
     clang_args = ["-std=c90", "-x", "c", "-Iinclude", "-Isrc"]
@@ -116,19 +267,6 @@ def collect_clang_args():
         if os.path.isdir(sub):
             clang_args.append(f"-I{sub}")
 
-    # Ensure Clang builtin headers (<stddef.h>, <stdint.h>) resolve on standalone libclang
-    builtin_patterns = (
-        "/usr/lib/llvm-*/lib/clang/*/include",
-        "/usr/lib/clang/*/include",
-        "/opt/homebrew/opt/llvm/lib/clang/*/include",
-        "/opt/homebrew/Cellar/llvm*/*/lib/clang/*/include",
-    )
-    for pat in builtin_patterns:
-        matches = sorted(glob.glob(pat), reverse=True)
-        if matches and os.path.isdir(matches[0]):
-            clang_args.extend(["-isystem", matches[0]])
-            break
-
     if sys.platform == "darwin":
         try:
             sdk = subprocess.check_output(
@@ -138,7 +276,33 @@ def collect_clang_args():
                 clang_args.extend(["-isysroot", sdk])
         except (subprocess.SubprocessError, OSError):
             pass
-    return clang_args
+
+    return resolve_std_header_args(idx, clang_args)
+
+
+def check_fn_ptr_return_enum(cur, fpath):
+    """Check whether a cursor declaring a function pointer returns an enum.
+
+    @param cur AST `Cursor` to inspect for function-pointer types.
+    @param fpath Source file `Path` owning `cur` for diagnostic reporting.
+    @return `1` if `cur` declares a non-enum-returning function pointer, else `0`.
+    """
+    t = cur.type
+    if t.kind == TypeKind.TYPEDEF:
+        t = cur.underlying_typedef_type
+    while t.kind == TypeKind.POINTER:
+        t = t.get_pointee()
+    canon = t.get_canonical()
+    if canon.kind in (TypeKind.FUNCTIONPROTO, TypeKind.FUNCTIONNOPROTO):
+        res_canon = canon.get_result().get_canonical()
+        if res_canon.kind != TypeKind.ENUM:
+            print(
+                f"{fpath}:{cur.location.line}: error: function pointer `{cur.spelling}` "
+                f"returns `{canon.get_result().spelling}` instead of enum `fortran_orm_error_t`",
+                file=sys.stderr,
+            )
+            return 1
+    return 0
 
 
 def main():
@@ -152,7 +316,7 @@ def main():
 
     init_libclang()
     idx = Index.create()
-    clang_args = collect_clang_args()
+    clang_args = collect_clang_args(idx)
 
     files = []
     for p in args.paths:
@@ -196,6 +360,13 @@ def main():
                         file=sys.stderr,
                     )
                     errors += 1
+            elif cur.kind in (
+                CursorKind.TYPEDEF_DECL,
+                CursorKind.FIELD_DECL,
+                CursorKind.PARM_DECL,
+                CursorKind.VAR_DECL,
+            ):
+                errors += check_fn_ptr_return_enum(cur, fpath)
 
     if errors:
         return 1

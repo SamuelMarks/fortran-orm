@@ -2,12 +2,14 @@
 """
 @file generate_undercovered.py
 @module fortran_orm_coverage
-@brief Audits 100% C89 + Fortran documentation coverage (when `--doc` is passed)
-or collects live `gcovr` function/line/branch test coverage from `build-cov`
-plus 12-era Fortran CTest results to generate or verify `UNDERCOVERED.md`.
+@brief Audits 100% C89 + Fortran + Python documentation coverage (when `--doc`
+is passed) or collects live `gcovr` function/line/branch test coverage from
+`build-cov` plus 12-era Fortran CTest results to generate or verify
+`UNDERCOVERED.md`.
 """
 
 import argparse
+import ast
 import json
 import re
 import shutil
@@ -132,6 +134,58 @@ def check_fortran_docs(root):
     return True, []
 
 
+def check_python_docs(root):
+    """Verify 100% file, module, class, function, arg, and return docs in `scripts/*.py`.
+
+    @param root Repository root Path.
+    @return Tuple `(ok, gaps)` where `ok` is True when zero Python doc gaps exist.
+    """
+    gaps = []
+    for py_path in sorted((root / "scripts").glob("*.py")):
+        rel = py_path.relative_to(root)
+        mod = ast.parse(py_path.read_text(encoding="utf-8"), filename=str(rel))
+        mod_doc = ast.get_docstring(mod) or ""
+        for tag in ("@file", "@module", "@brief"):
+            if tag not in mod_doc:
+                gaps.append(f"{rel}:1: module docstring missing `{tag}`")
+        for node in ast.walk(mod):
+            if isinstance(node, ast.ClassDef):
+                cdoc = ast.get_docstring(node) or ""
+                if not cdoc.strip():
+                    gaps.append(
+                        f"{rel}:{node.lineno}: class `{node.name}` missing docstring"
+                    )
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                fdoc = ast.get_docstring(node) or ""
+                if not fdoc.strip():
+                    gaps.append(
+                        f"{rel}:{node.lineno}: function `{node.name}` missing docstring"
+                    )
+                    continue
+                all_args = (
+                    list(node.args.posonlyargs)
+                    + list(node.args.args)
+                    + list(node.args.kwonlyargs)
+                )
+                if node.args.vararg:
+                    all_args.append(node.args.vararg)
+                if node.args.kwarg:
+                    all_args.append(node.args.kwarg)
+                for arg in all_args:
+                    if arg.arg in ("self", "cls"):
+                        continue
+                    if not re.search(
+                        r"@param(?:\[[^\]]*\])?\s+" + re.escape(arg.arg) + r"\b",
+                        fdoc,
+                    ):
+                        gaps.append(
+                            f"{rel}:{node.lineno}: `{node.name}` missing `@param {arg.arg}`"
+                        )
+                if "@return" not in fdoc:
+                    gaps.append(f"{rel}:{node.lineno}: `{node.name}` missing `@return`")
+    return len(gaps) == 0, gaps
+
+
 def collect_c_coverage(root, cov_dir):
     """Run gcovr --json-summary against cov_dir and return coverage metrics.
 
@@ -168,7 +222,11 @@ def collect_c_coverage(root, cov_dir):
                 str(cov_dir),
             ]
         )
-        subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True)
+        if res.returncode != 0:
+            sys.stderr.write(res.stdout)
+            sys.stderr.write(res.stderr)
+            raise subprocess.CalledProcessError(res.returncode, cmd)
         data = json.loads(summary_json.read_text(encoding="utf-8"))
     return data
 
@@ -279,12 +337,13 @@ def main():
     if args.doc:
         c_ok, c_gaps = check_c_docs(root)
         f_ok, f_gaps = check_fortran_docs(root)
-        if not c_ok or not f_ok:
-            for g in c_gaps + f_gaps:
+        p_ok, p_gaps = check_python_docs(root)
+        if not c_ok or not f_ok or not p_ok:
+            for g in c_gaps + f_gaps + p_gaps:
                 print(f"DOC GAP: {g}", file=sys.stderr)
             return 1
         print(
-            "OK: 100.0% documentation coverage across all C89 headers/sources and all Fortran files."
+            "OK: 100.0% documentation coverage across all C89 headers/sources, Fortran files, and Python scripts."
         )
         return 0
 

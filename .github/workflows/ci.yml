@@ -46,13 +46,13 @@ jobs:
 
       - name: Verify 100% function, line, and branch test coverage
         run: |
-          cmake -S . -B build-cov -G Ninja -DFORTRAN_ORM_ENABLE_COVERAGE=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF
+          cmake -S . -B build-cov -G Ninja -DFORTRAN_ORM_ENABLE_COVERAGE=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF -DFORTRAN_ORM_C_ORM_DIR="$PWD/build/_deps/c_orm-src"
           cmake --build build-cov --target test_fortran_orm_c --parallel
           ./build-cov/test_fortran_orm_c
           python3 scripts/generate_undercovered.py --check --cov-dir build-cov
 
       - name: Run AddressSanitizer + UndefinedBehaviorSanitizer suite
         run: |
-          cmake -S . -B build-asan -G Ninja -DFORTRAN_ORM_ENABLE_ASAN=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF
+          cmake -S . -B build-asan -G Ninja -DFORTRAN_ORM_ENABLE_ASAN=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF -DFORTRAN_ORM_C_ORM_DIR="$PWD/build/_deps/c_orm-src"
           cmake --build build-asan --target test_fortran_orm_c --parallel
           ./build-asan/test_fortran_orm_c

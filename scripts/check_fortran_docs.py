@@ -21,7 +21,12 @@ import sys
 
 
 def parse_fixed_doc_and_units(filepath, lines):
-    """Check fixed-form (.f / .inc) file & subprogram documentation."""
+    """Check fixed-form (.f / .inc) file & subprogram documentation.
+
+    @param filepath Relative path to the fixed-form Fortran file.
+    @param lines Stripped source lines of `filepath`.
+    @return List of human-readable documentation gap messages.
+    """
     missing = []
     header_comments = []
     for line in lines:
@@ -99,7 +104,12 @@ def parse_fixed_doc_and_units(filepath, lines):
 
 
 def parse_free_doc_and_units(filepath, lines):
-    """Check free-form (.f90 / .f95) file, module, type, and procedure docs."""
+    """Check free-form (.f90 / .f95) file, module, type, and procedure docs.
+
+    @param filepath Relative path to the free-form Fortran file.
+    @param lines Stripped source lines of `filepath`.
+    @return List of human-readable documentation gap messages.
+    """
     missing = []
     full_head = "\n".join(lines[:30])
     if "@file" not in full_head:
@@ -238,7 +248,10 @@ def parse_free_doc_and_units(filepath, lines):
 
 
 def main():
-    """CLI entry point for Fortran 100% documentation coverage checker."""
+    """CLI entry point for Fortran 100% documentation coverage checker.
+
+    @return Process exit status (`0` on 100% doc coverage, `1` otherwise).
+    """
     git_out = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
         text=True,

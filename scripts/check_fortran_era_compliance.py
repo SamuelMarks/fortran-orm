@@ -18,6 +18,7 @@ ERA_RULES = [
             "fortran/era/fortran_i/cormf1.f",
             "tests/fortran/era_01_fortran_i.f",
             "examples/fortran_i_1957_telemetry.f",
+            "examples/fortran_i_1957_census_tabulator.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -43,6 +44,7 @@ ERA_RULES = [
             "fortran/era/fortran_ii/cormf2.f",
             "tests/fortran/era_02_fortran_ii.f",
             "examples/fortran_ii_1958_ballistics.f",
+            "examples/fortran_ii_1958_hydro_reservoir.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -64,6 +66,7 @@ ERA_RULES = [
             "fortran/era/fortran_iii/cormf3.f",
             "tests/fortran/era_03_fortran_iii.f",
             "examples/fortran_iii_1958_reactor_scram.f",
+            "examples/fortran_iii_1958_radar_track.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -84,6 +87,7 @@ ERA_RULES = [
             "fortran/era/fortran_iv/cormf4.f",
             "tests/fortran/era_04_fortran_iv.f",
             "examples/fortran_iv_1962_orbital_ephemeris.f",
+            "examples/fortran_iv_1962_structural_truss.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -103,6 +107,7 @@ ERA_RULES = [
             "fortran/era/fortran66/corm66_lib.f",
             "tests/fortran/era_05_fortran_66.f",
             "examples/fortran66_steam_tables.f",
+            "examples/fortran66_chemical_kinetics.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -126,6 +131,7 @@ ERA_RULES = [
             "tests/fortran/era_06_fortran_77.f",
             "examples/fortran77_ledger.f",
             "examples/fortran77_ast_seismic.f",
+            "examples/fortran77_ocean_hydrography.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -147,6 +153,7 @@ ERA_RULES = [
             "tests/fortran/era_07_fortran_90.f90",
             "examples/fortran90_matrix_sim.f90",
             "examples/fortran90_weather_stations.f90",
+            "examples/fortran90_power_grid_dispatch.f90",
         ],
         "fixed72": False,
         "max_ident": 31,
@@ -166,6 +173,7 @@ ERA_RULES = [
             "fortran/era/fortran95/fortran_orm_f95.f95",
             "tests/fortran/era_08_fortran_95.f95",
             "examples/fortran95_forall_cfd.f95",
+            "examples/fortran95_blackbody_planck.f95",
         ],
         "fixed72": False,
         "max_ident": 31,
@@ -182,7 +190,11 @@ ERA_RULES = [
 
 
 def strip_strings_and_hollerith(code):
-    """Replace string and Hollerith literals with spaces so lexical checks inspect code tokens."""
+    """Replace string and Hollerith literals with spaces so lexical checks inspect code tokens.
+
+    @param code Fortran statement text with comments already removed.
+    @return Sanitized statement text with character/Hollerith literals masked.
+    """
     # Remove single/double quoted strings
     out = re.sub(r"'[^']*'|\"[^\"]*\"", "''", code)
     # Remove nH... Hollerith constants
@@ -202,7 +214,11 @@ def strip_strings_and_hollerith(code):
 
 
 def check_rule(rule):
-    """Validate all files in a single historical era rule entry."""
+    """Validate all files in a single historical era rule entry.
+
+    @param rule Era rule dictionary specifying files, column limit, and forbidden tokens.
+    @return List of dialect compliance violation strings.
+    """
     errors = []
     for rel_path in rule["files"]:
         if not os.path.isfile(rel_path):
@@ -278,7 +294,10 @@ def check_rule(rule):
 
 
 def main():
-    """CLI entry point for 12-era Fortran compliance verifier."""
+    """CLI entry point for 12-era Fortran compliance verifier.
+
+    @return Process exit status (`0` when all 12 eras comply, `1` otherwise).
+    """
     all_errors = []
     for rule in ERA_RULES:
         all_errors.extend(check_rule(rule))
@@ -299,10 +318,14 @@ def main():
         "tests/fortran/era_12_fortran_2023.f90",
         "examples/fortran2003_oop_models.f90",
         "examples/fortran2003_pool_and_ast.f90",
+        "examples/fortran2003_spectroscopy_crud.f90",
         "examples/fortran2008_contiguous_nbody.f90",
+        "examples/fortran2008_kalman_navigation.f90",
         "examples/fortran2018_cfi_strided_stencil.f90",
+        "examples/fortran2018_acoustic_wavefield.f90",
         "examples/fortran2023_scientific_orm.f90",
         "examples/fortran2023_mainframe_ebcdic_decimal.f90",
+        "examples/fortran2023_isotope_decay_ledger.f90",
     ]
     for mf in modern_files:
         if not os.path.isfile(mf):
