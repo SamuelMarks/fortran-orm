@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install toolchain dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gfortran ninja-build cmake doxygen gcovr cppcheck clang-format python3-clang
+
+      - name: Install toolchain dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc ninja doxygen gcovr cppcheck clang-format
+
+      - name: Configure & build static + 12-era Fortran suites
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure -j4
+
+      - name: Verify 100% documentation, enum-return, and 12-era dialect compliance
+        run: |
+          python3 scripts/generate_undercovered.py --doc
+          python3 scripts/check_enum_returns_clang.py
+          python3 scripts/check_fortran_era_compliance.py
+
+      - name: Run AddressSanitizer + UndefinedBehaviorSanitizer suite
+        run: |
+          cmake -S . -B build-asan -G Ninja -DFORTRAN_ORM_ENABLE_ASAN=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF
+          cmake --build build-asan --target test_fortran_orm_c --parallel
+          ./build-asan/test_fortran_orm_c

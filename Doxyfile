@@ -1,0 +1,24 @@
+# Doxygen configuration enforcing 100% C89 documentation coverage in fortran-orm
+PROJECT_NAME           = "fortran-orm"
+PROJECT_NUMBER         = "0.1.0"
+PROJECT_BRIEF          = "Production FORTRAN I through Fortran 2023 FFI ORM library over c-orm generated via cdd-c"
+OUTPUT_DIRECTORY       = build/doxygen
+INPUT                  = include src
+FILE_PATTERNS          = *.h *.c
+RECURSIVE              = YES
+EXTRACT_ALL            = NO
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_LOCAL_CLASSES  = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+JAVADOC_AUTOBRIEF      = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = YES
+QUIET                  = YES
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+PREDEFINED             = FORTRAN_ORM_EXPORT= FORTRAN_ORM_NO_DISCARD=

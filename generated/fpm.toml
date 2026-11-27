@@ -1,0 +1,8 @@
+name = "fortran_orm"
+version = "0.1.0"
+
+[library]
+source-dir = "."
+
+[build]
+link = ["fortran_orm"]

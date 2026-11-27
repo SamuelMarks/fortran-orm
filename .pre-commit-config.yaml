@@ -1,0 +1,32 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format-check
+        name: clang-format (ISO C89 headers, sources & tests)
+        entry: clang-format --dry-run --Werror
+        language: system
+        files: \.(c|h)$
+
+      - id: check-enum-returns
+        name: libclang unified error-enum return & no-(void) check
+        entry: python3 scripts/check_enum_returns_clang.py
+        language: system
+        pass_filenames: false
+
+      - id: check-cdd-bindings-drift
+        name: cdd-c Fortran FFI zero-drift check
+        entry: bash scripts/generate_bindings.sh --check
+        language: system
+        pass_filenames: false
+
+      - id: check-fortran-era-compliance
+        name: 12-era Fortran historical dialect compliance check
+        entry: python3 scripts/check_fortran_era_compliance.py
+        language: system
+        pass_filenames: false
+
+      - id: check-100pct-doc-coverage
+        name: 100% C89 Doxygen & Fortran documentation coverage check
+        entry: python3 scripts/generate_undercovered.py --doc
+        language: system
+        pass_filenames: false
