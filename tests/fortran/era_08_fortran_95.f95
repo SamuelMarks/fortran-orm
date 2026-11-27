@@ -15,6 +15,8 @@ PROGRAM era_08_fortran_95
   IF (.NOT. corm_f95_db_is_open(db)) STOP 1
 
   CALL corm_f95_exec(db, "CREATE TABLE f95_grid(u REAL, v REAL)", statuses(2))
+  CALL corm_f95_query_matrix(db, "SELECT u, v FROM f95_grid", dst_mat, nrows, rc)
+  IF (.NOT. corm_f95_is_ok(rc) .OR. nrows /= 0) STOP 1
 
   FORALL (i = 1:3)
     src_mat(i, 1) = DBLE(i)

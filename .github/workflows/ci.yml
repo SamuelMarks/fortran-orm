@@ -25,6 +25,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install gcc ninja doxygen gcovr cppcheck clang-format
+          python3 -m venv "$RUNNER_TEMP/py-clang"
+          "$RUNNER_TEMP/py-clang/bin/pip" install --quiet libclang
+          echo "$RUNNER_TEMP/py-clang/bin" >> "$GITHUB_PATH"
 
       - name: Configure & build static + 12-era Fortran suites
         run: |
@@ -32,11 +35,21 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure -j4
 
-      - name: Verify 100% documentation, enum-return, and 12-era dialect compliance
+      - name: Verify formatting, cppcheck, 100% docs, enum-return, and 12-era dialect compliance
         run: |
+          clang-format --dry-run --Werror include/*.h src/*.h src/*.c tests/c/*.c tests/c/*.h
+          cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr --suppress=missingIncludeSystem -Iinclude -Isrc include src
+          python3 scripts/generate_undercovered.py --help >/dev/null
           python3 scripts/generate_undercovered.py --doc
           python3 scripts/check_enum_returns_clang.py
           python3 scripts/check_fortran_era_compliance.py
+
+      - name: Verify 100% function, line, and branch test coverage
+        run: |
+          cmake -S . -B build-cov -G Ninja -DFORTRAN_ORM_ENABLE_COVERAGE=ON -DFORTRAN_ORM_BUILD_EXAMPLES=OFF
+          cmake --build build-cov --target test_fortran_orm_c --parallel
+          ./build-cov/test_fortran_orm_c
+          python3 scripts/generate_undercovered.py --check --cov-dir build-cov
 
       - name: Run AddressSanitizer + UndefinedBehaviorSanitizer suite
         run: |

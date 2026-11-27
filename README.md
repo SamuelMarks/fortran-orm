@@ -1,6 +1,7 @@
 # fortran-orm
 
 [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/License-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
+[![CI](https://github.com/SamuelMarks/fortran-orm/actions/workflows/ci.yml/badge.svg)](https://github.com/SamuelMarks/fortran-orm/actions/workflows/ci.yml)
 [![C Standard: ISO C89](https://img.shields.io/badge/C-ISO%20C89%20%2F%20ANSI-00599C.svg)](include/fortran_orm_ffi.h)
 [![Fortran Standards: 1957..2023](https://img.shields.io/badge/FORTRAN-I%20%7C%20II%20%7C%20III%20%7C%20IV%20%7C%2066%20%7C%2077%20%7C%2090%20%7C%2095%20%7C%202003%20%7C%202008%20%7C%202018%20%7C%202023-734f96.svg)](docs/STANDARDS_MATRIX.md)
 [![Test Coverage: 100.0%](https://img.shields.io/badge/coverage-100.0%25-brightgreen.svg)](UNDERCOVERED.md)
@@ -94,6 +95,27 @@ python3 scripts/generate_undercovered.py --doc
 python3 scripts/check_enum_returns_clang.py
 python3 scripts/check_fortran_era_compliance.py
 ```
+
+---
+
+## Runnable Examples Across All 12 Fortran Eras (`examples/`)
+
+Every example builds cleanly under its era's strict compiler flags and runs as an automated `CTest` target:
+
+| Standard Era | Runnable Example(s) | Domain & Features Showcased |
+| :--- | :--- | :--- |
+| **FORTRAN (I)** (1957) | [`fortran_i_1957_telemetry.f`](examples/fortran_i_1957_telemetry.f) | IBM 704 wind-tunnel Mach logger (`ICORMF` in 3-way arithmetic `IF`, `NAMF()` statement functions) |
+| **FORTRAN II** (1958) | [`fortran_ii_1958_ballistics.f`](examples/fortran_ii_1958_ballistics.f) | Ballistic range recorder (`SUBROUTINE LOGSHO`, `CALL`, named `COMMON /CORMCM/`, `A1` text) |
+| **FORTRAN III** (1958–59) | [`fortran_iii_1958_reactor_scram.f`](examples/fortran_iii_1958_reactor_scram.f) | Reactor control-rod interlock audit (`ICORMB` boolean status/handle bitmask words) |
+| **FORTRAN IV** (1962) | [`fortran_iv_1962_orbital_ephemeris.f`](examples/fortran_iv_1962_orbital_ephemeris.f) | Orbital Vis-Viva ephemeris propagator (`BLOCK DATA`, `LOGICAL`, padded `6x3` `DOUBLE PRECISION` matrix) |
+| **FORTRAN 66** (1966) | [`fortran66_steam_tables.f`](examples/fortran66_steam_tables.f) | ASME saturated steam tables & enthalpy interpolation (strict ANSI X3.9-1966, zero `CHARACTER`) |
+| **FORTRAN 77** (1978) | [`fortran77_ledger.f`](examples/fortran77_ledger.f), [`fortran77_ast_seismic.f`](examples/fortran77_ast_seismic.f) | Savepoint financial ledger; seismic arrival catalog (`NULL` columns + 5-dialect AST rendering) |
+| **Fortran 90** (1991) | [`fortran90_matrix_sim.f90`](examples/fortran90_matrix_sim.f90), [`fortran90_weather_stations.f90`](examples/fortran90_weather_stations.f90) | 2D heat-mesh persistence; synoptic weather network (`MODULE`, generic `corm_f90_bind`/`corm_f90_col`, AST) |
+| **Fortran 95** (1997) | [`fortran95_forall_cfd.f95`](examples/fortran95_forall_cfd.f95) | Supersonic nozzle CFD (`PURE` & `ELEMENTAL` predicates, `FORALL` scaled matrix persistence) |
+| **Fortran 2003** (2004) | [`fortran2003_oop_models.f90`](examples/fortran2003_oop_models.f90), [`fortran2003_pool_and_ast.f90`](examples/fortran2003_pool_and_ast.f90) | RAII `BIND(C)` CRUD; thread-safe `orm_pool_t` leasing, multi-dialect `orm_ast_t`, JSON export |
+| **Fortran 2008** (2010) | [`fortran2008_contiguous_nbody.f90`](examples/fortran2008_contiguous_nbody.f90) | 4-body gravitational phase-space checkpointing (`SUBMODULE`, `CONTIGUOUS` zero-copy arrays, `BLOCK`) |
+| **Fortran 2018** (2018) | [`fortran2018_cfi_strided_stencil.f90`](examples/fortran2018_cfi_strided_stencil.f90) | Strided 1D/2D finite-difference slices & `CHARACTER(LEN=*)` via `<ISO_Fortran_binding.h>` `CFI_cdesc_t` |
+| **Fortran 2023** (2023) | [`fortran2023_scientific_orm.f90`](examples/fortran2023_scientific_orm.f90), [`fortran2023_mainframe_ebcdic_decimal.f90`](examples/fortran2023_mainframe_ebcdic_decimal.f90) | `F_C_STRING`, UUID v4; z/OS `EBCDIC` CCSID 037, exact 38-digit decimal banking, sharding, OAuth2 |
 
 ---
 

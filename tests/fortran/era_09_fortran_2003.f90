@@ -22,9 +22,11 @@ PROGRAM era_09_fortran_2003
   TYPE(orm_pool_t) :: pool
   TYPE(orm_schema_t) :: schema
   TYPE(sensor_pod_t), TARGET :: rec_in, rec_out
-  CHARACTER(LEN=:), ALLOCATABLE :: ver_str, uuid_str, sql_str, json_str, val_str
+  CHARACTER(LEN=:), ALLOCATABLE :: ver_str, uuid_str, sql_str, json_str, val_str, err_msg
   INTEGER(C_INT) :: rc
-  INTEGER(C_INT32_T) :: pcount, nrows, i
+  INTEGER(C_INT32_T) :: pcount, nrows, i, iv32
+  INTEGER(C_INT64_T) :: iv64
+  REAL(C_DOUBLE) :: fv64
   LOGICAL :: has_row
 
   rc = corm_f2003_version(ver_str)
@@ -34,6 +36,21 @@ PROGRAM era_09_fortran_2003
 
   rc = db%open(":memory:")
   IF (rc /= FORTRAN_ORM_OK .OR. .NOT. db%is_open()) STOP 1
+  rc = db%open(":memory:")
+  IF (rc /= FORTRAN_ORM_OK .OR. .NOT. db%is_open()) STOP 1
+
+  rc = db%tx_begin()
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = db%tx_rollback()
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = db%tx_begin()
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = db%tx_commit()
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = db%exec("INVALID SQL")
+  IF (rc == FORTRAN_ORM_OK) STOP 1
+  rc = db%last_error(err_msg)
+  IF (rc /= FORTRAN_ORM_OK .OR. LEN(err_msg) == 0) STOP 1
 
   ! 1. Runtime BIND(C) struct reflection CRUD
   rc = schema%create("sensors", 32_C_INT32_T)
@@ -90,13 +107,33 @@ PROGRAM era_09_fortran_2003
   IF (rc /= FORTRAN_ORM_OK .OR. INDEX(json_str, "KELVIN") == 0) STOP 1
 
   ! 4. Prepared statement + Connection pool
-  rc = stmt%prepare(db, "SELECT label FROM sensors WHERE id = ?")
+  rc = db%exec("CREATE TABLE st03(i32 INT, i64 INT, f64 REAL, s TEXT)")
   IF (rc /= FORTRAN_ORM_OK) STOP 1
-  rc = stmt%bind_i32(1_C_INT32_T, 2003_C_INT32_T)
+  rc = stmt%prepare(db, "INSERT INTO st03 VALUES(?,?,?,?)")
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%bind_i32(1_C_INT32_T, 42_C_INT32_T)
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%bind_i64(2_C_INT32_T, 9000000000_C_INT64_T)
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%bind_f64(3_C_INT32_T, 3.14_C_DOUBLE)
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%bind_str(4_C_INT32_T, "KELVIN")
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%step(has_row)
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%prepare(db, "SELECT i32, i64, f64, s FROM st03 WHERE i32 = ?")
+  IF (rc /= FORTRAN_ORM_OK) STOP 1
+  rc = stmt%bind_i32(1_C_INT32_T, 42_C_INT32_T)
   IF (rc /= FORTRAN_ORM_OK) STOP 1
   rc = stmt%step(has_row)
   IF (rc /= FORTRAN_ORM_OK .OR. .NOT. has_row) STOP 1
-  rc = stmt%col_str(1_C_INT32_T, val_str)
+  rc = stmt%col_i32(1_C_INT32_T, iv32)
+  IF (rc /= FORTRAN_ORM_OK .OR. iv32 /= 42_C_INT32_T) STOP 1
+  rc = stmt%col_i64(2_C_INT32_T, iv64)
+  IF (rc /= FORTRAN_ORM_OK .OR. iv64 /= 9000000000_C_INT64_T) STOP 1
+  rc = stmt%col_f64(3_C_INT32_T, fv64)
+  IF (rc /= FORTRAN_ORM_OK .OR. ABS(fv64 - 3.14_C_DOUBLE) > 1.0D-9) STOP 1
+  rc = stmt%col_str(4_C_INT32_T, val_str)
   IF (rc /= FORTRAN_ORM_OK .OR. val_str /= "KELVIN") STOP 1
 
   rc = pool%init(":memory:", 1_C_INT32_T, 2_C_INT32_T, 100_C_INT32_T)

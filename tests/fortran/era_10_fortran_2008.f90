@@ -19,6 +19,8 @@ PROGRAM era_10_fortran_2008
   IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1
 
   v_in = [1.25_REAL64, 2.50_REAL64, 3.75_REAL64, 5.00_REAL64]
+  rc = corm_f2008_insert_vec_f64(db, "INSERT INTO vec08 VALUES(?)", v_in(1:0))
+  IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1
   rc = corm_f2008_insert_vec_f64(db, "INSERT INTO vec08 VALUES(?)", v_in)
   IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1
 

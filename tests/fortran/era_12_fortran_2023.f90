@@ -13,7 +13,8 @@ PROGRAM era_12_fortran_2023
   rc = corm_f2023_open(db, ":memory:   ", ASIS=.FALSE.)
   IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1
 
-  rc = corm_f2023_exec(db, "CREATE TABLE f23_mesh(u REAL, v REAL)   ")
+  rc = corm_f2023_exec(db, "CREATE TABLE f23_mesh(u REAL, v REAL)   ", &
+                       ASIS=.FALSE.)
   IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1
 
   g_in = RESHAPE([1.5_REAL64, 2.5_REAL64, 3.5_REAL64, 4.5_REAL64], [2, 2])
@@ -25,6 +26,13 @@ PROGRAM era_12_fortran_2023
   IF (rc /= FORTRAN_ORM_OK .OR. nrows /= 2_INT32) ERROR STOP 1
   IF (MAXVAL(ABS(g_in - g_out)) > 1.0E-12_REAL64) ERROR STOP 1
 
+  rc = corm_f2023_dec_add_str("bad", "0.875", dec_sum)
+  IF (rc == FORTRAN_ORM_OK .OR. dec_sum /= "") ERROR STOP 1
+  rc = corm_f2023_dec_add_str("1.0", "bad", dec_sum)
+  IF (rc == FORTRAN_ORM_OK .OR. dec_sum /= "") ERROR STOP 1
+  rc = corm_f2023_dec_add_str("99999999999999999999999999999999999999", &
+                              "5", dec_sum)
+  IF (rc == FORTRAN_ORM_OK .OR. dec_sum /= "") ERROR STOP 1
   rc = corm_f2023_dec_add_str("123456789012345678901234567890.125", &
                               "0.875", dec_sum)
   IF (rc /= FORTRAN_ORM_OK) ERROR STOP 1

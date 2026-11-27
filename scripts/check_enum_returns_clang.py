@@ -14,53 +14,121 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-import clang.cindex
-from clang.cindex import Config, CursorKind, Index, LibclangError, TypeKind
+
+
+def bootstrap_clang_module():
+    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons."""
+    try:
+        import clang.cindex as _ci  # noqa: F401
+
+        return
+    except ModuleNotFoundError:
+        py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        search_Site = []
+        for pat in (
+            f"/opt/homebrew/opt/llvm/lib/{py_ver}/site-packages",
+            f"/opt/homebrew/Cellar/llvm*/*/lib/{py_ver}/site-packages",
+            f"/usr/local/opt/llvm*/lib/{py_ver}/site-packages",
+            "/opt/homebrew/opt/llvm/lib/python*/site-packages",
+            "/opt/homebrew/Cellar/llvm*/*/lib/python*/site-packages",
+            "/usr/local/opt/llvm*/lib/python*/site-packages",
+            "/usr/lib/python3/dist-packages",
+        ):
+            search_Site.extend(sorted(glob.glob(pat), reverse=True))
+        for sp in search_Site:
+            if os.path.isdir(os.path.join(sp, "clang")) and sp not in sys.path:
+                sys.path.append(sp)
+
+
+bootstrap_clang_module()
+from clang.cindex import (  # noqa: E402
+    Config,
+    CursorKind,
+    Diagnostic,
+    Index,
+    LibclangError,
+    TypeKind,
+)
 
 
 def init_libclang():
-    """Locate libclang shared library across macOS and Linux."""
+    """Locate and initialize libclang shared library across macOS and Linux."""
     try:
         _ = Config().lib
         return
     except (LibclangError, OSError):
         pass
+
+    candidates = []
+    if os.environ.get("LIBCLANG_PATH"):
+        env_p = os.environ["LIBCLANG_PATH"]
+        if os.path.isdir(env_p):
+            candidates.extend(sorted(glob.glob(os.path.join(env_p, "libclang*"))))
+        else:
+            candidates.append(env_p)
+
     for pat in (
-        "/Library/Developer/CommandLineTools/usr/lib/libclang*.dylib",
-        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libclang*.dylib",
         "/opt/homebrew/opt/llvm/lib/libclang*.dylib",
+        "/opt/homebrew/Cellar/llvm*/*/lib/libclang*.dylib",
+        "/usr/local/opt/llvm*/lib/libclang*.dylib",
         "/usr/lib/llvm-*/lib/libclang.so*",
         "/usr/lib/x86_64-linux-gnu/libclang*.so*",
+        "/usr/lib/aarch64-linux-gnu/libclang*.so*",
+        "/Library/Developer/CommandLineTools/usr/lib/libclang*.dylib",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libclang*.dylib",
     ):
-        for cand in glob.glob(pat):
-            if "libclang-cpp" not in cand and os.path.isfile(cand):
-                try:
-                    Config.set_library_file(cand)
-                    _ = Config().lib
-                    return
-                except (LibclangError, OSError):
-                    continue
+        candidates.extend(sorted(glob.glob(pat), reverse=True))
+
+    filtered = [c for c in candidates if "libclang-cpp" not in c and os.path.isfile(c)]
+    for compat in (True, False):
+        Config.set_compatibility_check(compat)
+        for cand in filtered:
+            try:
+                Config.set_library_file(cand)
+                _ = Config().lib
+                return
+            except (LibclangError, OSError):
+                continue
 
 
-def main():
-    """CLI entry point checking enum return types and zero (void) discards."""
-    parser = argparse.ArgumentParser(description="Enforce enum return types in C89.")
-    parser.add_argument("paths", nargs="*", default=["include", "src"])
-    args = parser.parse_args()
+def collect_clang_args():
+    """Build complete `-I` and sysroot flags for both local and CI FetchContent trees.
 
-    init_libclang()
-    idx = Index.create()
-
-    clang_args = ["-std=c90", "-x", "c", "-Iinclude", "-Isrc", "-I../c-orm/include"]
+    @return List of clang command-line flags for `Index.parse`.
+    """
+    clang_args = ["-std=c90", "-x", "c", "-Iinclude", "-Isrc"]
     for sub in (
+        "../c-orm/include",
+        "build/_deps/c_orm-src/include",
+        "build/_deps/c_orm-build/include",
         "build/_deps/cdd_c-src/include",
         "build/_deps/cdd_c-src/src",
         "build/_deps/c_str_span-src/c_str_span",
         "build/_deps/c89stringutils-src/c89stringutils",
         "build/_deps/cfs-src/include",
+        "build-cov/_deps/c_orm-src/include",
+        "build-cov/_deps/cdd_c-src/include",
+        "build-cov/_deps/cdd_c-src/src",
+        "build-cov/_deps/c_str_span-src/c_str_span",
+        "build-cov/_deps/c89stringutils-src/c89stringutils",
+        "build-cov/_deps/cfs-src/include",
     ):
         if os.path.isdir(sub):
             clang_args.append(f"-I{sub}")
+
+    # Ensure Clang builtin headers (<stddef.h>, <stdint.h>) resolve on standalone libclang
+    builtin_patterns = (
+        "/usr/lib/llvm-*/lib/clang/*/include",
+        "/usr/lib/clang/*/include",
+        "/opt/homebrew/opt/llvm/lib/clang/*/include",
+        "/opt/homebrew/Cellar/llvm*/*/lib/clang/*/include",
+    )
+    for pat in builtin_patterns:
+        matches = sorted(glob.glob(pat), reverse=True)
+        if matches and os.path.isdir(matches[0]):
+            clang_args.extend(["-isystem", matches[0]])
+            break
+
     if sys.platform == "darwin":
         try:
             sdk = subprocess.check_output(
@@ -70,6 +138,21 @@ def main():
                 clang_args.extend(["-isysroot", sdk])
         except (subprocess.SubprocessError, OSError):
             pass
+    return clang_args
+
+
+def main():
+    """CLI entry point checking enum return types and zero `(void)` discards.
+
+    @return Process exit status (`0` on full compliance, `1` otherwise).
+    """
+    parser = argparse.ArgumentParser(description="Enforce enum return types in C89.")
+    parser.add_argument("paths", nargs="*", default=["include", "src"])
+    args = parser.parse_args()
+
+    init_libclang()
+    idx = Index.create()
+    clang_args = collect_clang_args()
 
     files = []
     for p in args.paths:
@@ -94,6 +177,11 @@ def main():
                 errors += 1
 
         tu = idx.parse(f_abs, args=clang_args)
+        for diag in tu.diagnostics:
+            if diag.severity >= Diagnostic.Error:
+                print(f"{fpath}: clang parse error: {diag}", file=sys.stderr)
+                errors += 1
+
         for cur in tu.cursor.walk_preorder():
             if not cur.location.file:
                 continue
@@ -111,7 +199,9 @@ def main():
 
     if errors:
         return 1
-    print(f"OK: All {len(files)} C89 headers/sources return `fortran_orm_error_t` with zero `(void)` discards.")
+    print(
+        f"OK: All {len(files)} C89 headers/sources return `fortran_orm_error_t` with zero `(void)` discards."
+    )
     return 0
 
 

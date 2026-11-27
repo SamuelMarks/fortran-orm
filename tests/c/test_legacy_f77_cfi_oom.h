@@ -225,6 +225,18 @@ TEST test_legacy_bridge_all(void) {
   ASSERT_EQ(FORTRAN_ORM_ERROR_VALIDATION,
             corm66_(&op, &hnd, &idx, &ival, &dval, url_a4, &ilen, &ierr));
 
+  {
+    fortran_orm_i32_t a1_mem[8] = {58, 109, 101, 109, 111, 114, 121, 58};
+    fortran_orm_i32_t a1_hnd = 0;
+    ilen = 8;
+    op = FORTRAN_ORM_OP_OPEN_A1;
+    ASSERT_EQ(FORTRAN_ORM_OK,
+              icormf_(&op, &a1_hnd, &idx, &ival, &dval, a1_mem, &ilen));
+    op = FORTRAN_ORM_OP_CLOSE;
+    ASSERT_EQ(FORTRAN_ORM_OK,
+              icormf_(&op, &a1_hnd, &idx, &ival, &dval, a1_mem, &ilen));
+  }
+
   /* Slot exhaustion on legacy DB table (64 slots) */
   ilen = 8;
   for (i = 0; i < 64; i++) {

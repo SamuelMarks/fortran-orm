@@ -522,6 +522,17 @@ TEST test_matrix_and_crud(void) {
             fortran_orm_schema_add_col(
                 sc, "price", 5u, FORTRAN_ORM_COL_FLOAT64,
                 (fortran_orm_u32_t)offsetof(test_item_pod_t, price), 0u, 0, 0));
+  {
+    fortran_orm_schema_t *sc_cf0 = NULL;
+    ASSERT_EQ(FORTRAN_ORM_OK,
+              fortran_orm_schema_create(
+                  "cf0", 3u, (fortran_orm_u32_t)sizeof(rec1), &sc_cf0));
+    ASSERT_EQ(FORTRAN_ORM_OK,
+              fortran_orm_schema_add_col(
+                  sc_cf0, "tag", 3u, FORTRAN_ORM_COL_CHAR_FIXED,
+                  (fortran_orm_u32_t)offsetof(test_item_pod_t, tag), 8u, 0, 0));
+    ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_schema_free(sc_cf0));
+  }
   ASSERT_EQ(FORTRAN_ORM_OK,
             fortran_orm_schema_add_col(
                 sc, "tag", 3u, FORTRAN_ORM_COL_CHAR_FIXED,

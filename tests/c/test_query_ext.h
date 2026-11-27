@@ -157,7 +157,8 @@ TEST test_abstract_rs_and_ast(void) {
   ASSERT_NEQ(FORTRAN_ORM_OK, fortran_orm_ast_query_rs(db, ast, &rs));
   ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_ast_free(ast));
 
-  ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_ast_select("q", 1u, "   ", 3u, &ast));
+  ASSERT_EQ(FORTRAN_ORM_OK,
+            fortran_orm_ast_select("q\0 ", 3u, "   ", 3u, &ast));
   ASSERT_EQ(FORTRAN_ORM_ERROR_INVALID_HANDLE, fortran_orm_ast_distinct(NULL));
   ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_ast_distinct(ast));
 

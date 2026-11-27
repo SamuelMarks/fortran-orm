@@ -20,6 +20,10 @@ PROGRAM era_07_fortran_90
   CALL corm_f90_exec(db, "CREATE TABLE f90_items(id INT, score REAL, tag TEXT)", rc)
   IF (rc /= CORM_F90_OK) STOP 1
 
+  CALL corm_f90_tx_begin(db)
+  CALL corm_f90_tx_rollback(db, rc)
+  IF (rc /= CORM_F90_OK) STOP 1
+
   CALL corm_f90_tx_begin(db, rc)
   IF (rc /= CORM_F90_OK) STOP 1
 

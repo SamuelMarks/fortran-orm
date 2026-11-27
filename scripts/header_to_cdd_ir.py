@@ -13,7 +13,32 @@ import os
 import re
 import subprocess
 import sys
-from clang.cindex import Config, CursorKind, Index, LibclangError, TypeKind
+
+
+def bootstrap_clang_module():
+    """Ensure `clang.cindex` is importable across system, venv, and Homebrew Pythons."""
+    try:
+        import clang.cindex as _ci  # noqa: F401
+
+        return
+    except ModuleNotFoundError:
+        py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        for pat in (
+            f"/opt/homebrew/opt/llvm/lib/{py_ver}/site-packages",
+            f"/opt/homebrew/Cellar/llvm*/*/lib/{py_ver}/site-packages",
+            f"/usr/local/opt/llvm*/lib/{py_ver}/site-packages",
+            "/opt/homebrew/opt/llvm/lib/python*/site-packages",
+            "/opt/homebrew/Cellar/llvm*/*/lib/python*/site-packages",
+            "/usr/local/opt/llvm*/lib/python*/site-packages",
+            "/usr/lib/python3/dist-packages",
+        ):
+            for sp in sorted(glob.glob(pat), reverse=True):
+                if os.path.isdir(os.path.join(sp, "clang")) and sp not in sys.path:
+                    sys.path.append(sp)
+
+
+bootstrap_clang_module()
+from clang.cindex import Config, CursorKind, Index, LibclangError, TypeKind  # noqa: E402
 
 
 def configure_libclang():
@@ -29,23 +54,26 @@ def configure_libclang():
         patterns.append(os.environ["LIBCLANG_PATH"])
     patterns.extend(
         [
-            "/Library/Developer/CommandLineTools/usr/lib/libclang*.dylib",
-            "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libclang*.dylib",
             "/opt/homebrew/opt/llvm/lib/libclang*.dylib",
             "/opt/homebrew/Cellar/llvm*/*/lib/libclang*.dylib",
             "/usr/local/opt/llvm*/lib/libclang*.dylib",
             "/usr/lib/llvm-*/lib/libclang.so*",
             "/usr/lib/x86_64-linux-gnu/libclang*.so*",
             "/usr/lib/aarch64-linux-gnu/libclang*.so*",
+            "/Library/Developer/CommandLineTools/usr/lib/libclang*.dylib",
+            "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libclang*.dylib",
         ]
     )
+    candidates = []
     for pat in patterns:
         if os.path.isdir(pat):
-            Config.set_library_path(pat)
-            return
-        for cand in glob.glob(pat):
-            if "libclang-cpp" in cand or not os.path.isfile(cand):
-                continue
+            candidates.extend(sorted(glob.glob(os.path.join(pat, "libclang*"))))
+        else:
+            candidates.extend(sorted(glob.glob(pat), reverse=True))
+    filtered = [c for c in candidates if "libclang-cpp" not in c and os.path.isfile(c)]
+    for compat in (True, False):
+        Config.set_compatibility_check(compat)
+        for cand in filtered:
             try:
                 Config.set_library_file(cand)
                 _ = Config().lib

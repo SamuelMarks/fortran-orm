@@ -311,6 +311,8 @@ TEST test_db_pool_shard_and_tx(void) {
   ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_pool_release(pool, leased));
 
   ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_pool_acquire(pool, &leased));
+  ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_pool_release(pool, leased));
+  ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_pool_acquire(pool, &leased));
   /* Disconnect on a pooled wrapper skips raw disconnect cleanly */
   ASSERT_EQ(C_ORM_OK, c_orm_pool_release(pool->pool, leased->db));
   ASSERT_EQ(FORTRAN_ORM_OK, fortran_orm_disconnect(leased));

@@ -42,6 +42,7 @@ ERA_RULES = [
         "files": [
             "fortran/era/fortran_ii/cormf2.f",
             "tests/fortran/era_02_fortran_ii.f",
+            "examples/fortran_ii_1958_ballistics.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -62,6 +63,7 @@ ERA_RULES = [
         "files": [
             "fortran/era/fortran_iii/cormf3.f",
             "tests/fortran/era_03_fortran_iii.f",
+            "examples/fortran_iii_1958_reactor_scram.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -81,6 +83,7 @@ ERA_RULES = [
         "files": [
             "fortran/era/fortran_iv/cormf4.f",
             "tests/fortran/era_04_fortran_iv.f",
+            "examples/fortran_iv_1962_orbital_ephemeris.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -99,6 +102,7 @@ ERA_RULES = [
         "files": [
             "fortran/era/fortran66/corm66_lib.f",
             "tests/fortran/era_05_fortran_66.f",
+            "examples/fortran66_steam_tables.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -121,6 +125,7 @@ ERA_RULES = [
             "fortran/era/fortran77/corm77_lib.f",
             "tests/fortran/era_06_fortran_77.f",
             "examples/fortran77_ledger.f",
+            "examples/fortran77_ast_seismic.f",
         ],
         "fixed72": True,
         "max_ident": 6,
@@ -141,6 +146,7 @@ ERA_RULES = [
             "fortran/era/fortran90/fortran_orm_f90.f90",
             "tests/fortran/era_07_fortran_90.f90",
             "examples/fortran90_matrix_sim.f90",
+            "examples/fortran90_weather_stations.f90",
         ],
         "fixed72": False,
         "max_ident": 31,
@@ -159,6 +165,7 @@ ERA_RULES = [
         "files": [
             "fortran/era/fortran95/fortran_orm_f95.f95",
             "tests/fortran/era_08_fortran_95.f95",
+            "examples/fortran95_forall_cfd.f95",
         ],
         "fixed72": False,
         "max_ident": 31,
@@ -290,6 +297,12 @@ def main():
         "tests/fortran/era_10_fortran_2008.f90",
         "tests/fortran/era_11_fortran_2018.f90",
         "tests/fortran/era_12_fortran_2023.f90",
+        "examples/fortran2003_oop_models.f90",
+        "examples/fortran2003_pool_and_ast.f90",
+        "examples/fortran2008_contiguous_nbody.f90",
+        "examples/fortran2018_cfi_strided_stencil.f90",
+        "examples/fortran2023_scientific_orm.f90",
+        "examples/fortran2023_mainframe_ebcdic_decimal.f90",
     ]
     for mf in modern_files:
         if not os.path.isfile(mf):

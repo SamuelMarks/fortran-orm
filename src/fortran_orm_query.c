@@ -107,9 +107,12 @@ fortran_orm_query_abstract(fortran_orm_db_t *db, const char *sql,
   crc = c_orm_find_all_abstract(db->db, c_sql, &wrap->arr);
   frc = fortran_orm_from_c(c_orm_system_free(c_sql));
   if (crc != C_ORM_OK) {
+    fortran_orm_error_t fa =
+        fortran_orm_from_c(c_orm_abstract_free(&wrap->arr));
     fortran_orm_error_t f2 = fortran_orm_from_c(c_orm_system_free(wrap));
-    return fortran_orm_keep_err(fortran_orm_from_c(crc),
-                                fortran_orm_keep_err(frc, f2));
+    return fortran_orm_keep_err(
+        fortran_orm_from_c(crc),
+        fortran_orm_keep_err(frc, fortran_orm_keep_err(fa, f2)));
   }
 
   wrap->magic = FORTRAN_ORM_MAGIC_RS;
@@ -939,7 +942,7 @@ fortran_orm_ast_query_rs(fortran_orm_db_t *db, fortran_orm_ast_t *ast,
     if (!params.params[i].is_string) {
       const char *p = (*pv == '-') ? (pv + 1) : pv;
       fortran_orm_u64_t uv = 0u;
-      while (*p >= '0' && *p <= '9') {
+      while (*p != '\0') {
         uv = (uv * 10u) + (fortran_orm_u64_t)(*p - '0');
         p++;
       }
@@ -960,8 +963,10 @@ fortran_orm_ast_query_rs(fortran_orm_db_t *db, fortran_orm_ast_t *ast,
         wrap->magic = FORTRAN_ORM_MAGIC_RS;
         *out_rs = wrap;
       } else {
+        fortran_orm_error_t fa =
+            fortran_orm_from_c(c_orm_abstract_free(&wrap->arr));
         fortran_orm_error_t fw = fortran_orm_from_c(c_orm_system_free(wrap));
-        rc = fw;
+        rc = fortran_orm_keep_err(rc, fortran_orm_keep_err(fa, fw));
       }
     }
   }

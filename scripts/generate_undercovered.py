@@ -4,11 +4,12 @@
 @module fortran_orm_coverage
 @brief Audits 100% C89 + Fortran documentation coverage (when `--doc` is passed)
 or collects live `gcovr` function/line/branch test coverage from `build-cov`
-plus 12-era Fortran CTest results to generate `UNDERCOVERED.md`.
+plus 12-era Fortran CTest results to generate or verify `UNDERCOVERED.md`.
 """
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -17,17 +18,59 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-def get_gcov_executable():
-    """Select the gcov executable matching the host C compiler."""
+def get_gcov_executable(cov_dir):
+    """Select the gcov executable matching the C compiler used for cov_dir.
+
+    @param cov_dir Path to the coverage-instrumented CMake build directory.
+    @return Command string passed to `gcovr --gcov-executable`.
+    """
+    cov_path = Path(cov_dir)
+    cache_file = cov_path / "CMakeCache.txt"
+    comp_id = ""
+    cc_path = ""
+    for cm_comp in cov_path.glob("CMakeFiles/*/CMakeCCompiler.cmake"):
+        txt = cm_comp.read_text(encoding="utf-8", errors="replace")
+        m_id = re.search(r'set\(CMAKE_C_COMPILER_ID\s+"([^"]+)"\)', txt)
+        if m_id:
+            comp_id = m_id.group(1).strip()
+            break
+    if cache_file.is_file():
+        cache_txt = cache_file.read_text(encoding="utf-8", errors="replace")
+        m_cc = re.search(
+            r"^CMAKE_C_COMPILER:(?:FILEPATH|STRING)=(.+)$",
+            cache_txt,
+            re.MULTILINE,
+        )
+        if m_cc:
+            cc_path = m_cc.group(1).strip()
+
+    cc_name = Path(cc_path).name.lower() if cc_path else ""
+    if "Clang" in comp_id or "clang" in cc_name:
+        if sys.platform == "darwin" and shutil.which("xcrun"):
+            return "xcrun llvm-cov gcov"
+        if shutil.which("llvm-cov"):
+            return "llvm-cov gcov"
+    if comp_id == "GNU" or "gcc" in cc_name:
+        m_ver = re.match(r"^gcc-(\d+)$", cc_name)
+        if m_ver and shutil.which(f"gcov-{m_ver.group(1)}"):
+            return f"gcov-{m_ver.group(1)}"
+        return "gcov"
+
     if sys.platform == "darwin" and shutil.which("xcrun"):
         return "xcrun llvm-cov gcov"
+    if shutil.which("gcov"):
+        return "gcov"
     if shutil.which("llvm-cov"):
         return "llvm-cov gcov"
     return "gcov"
 
 
 def check_c_docs(root):
-    """Run Doxygen (WARN_AS_ERROR=YES) over include/ and src/ and audit XML."""
+    """Run Doxygen (WARN_AS_ERROR=YES) over include/ and src/ and audit XML.
+
+    @param root Repository root Path.
+    @return Tuple `(ok, gaps)` where `ok` is True when zero doc gaps exist.
+    """
     dox_dir = root / "build" / "doxygen"
     dox_dir.mkdir(parents=True, exist_ok=True)
     res = subprocess.run(
@@ -73,7 +116,11 @@ def check_c_docs(root):
 
 
 def check_fortran_docs(root):
-    """Run scripts/check_fortran_docs.py across all 34+ Fortran files."""
+    """Run scripts/check_fortran_docs.py across all Fortran files.
+
+    @param root Repository root Path.
+    @return Tuple `(ok, gaps)` where `ok` is True when zero doc gaps exist.
+    """
     res = subprocess.run(
         [sys.executable, str(root / "scripts" / "check_fortran_docs.py")],
         cwd=str(root),
@@ -86,8 +133,18 @@ def check_fortran_docs(root):
 
 
 def collect_c_coverage(root, cov_dir):
-    """Run gcovr --json-summary against cov_dir and return per-file and total metrics."""
-    gcov_exec = get_gcov_executable()
+    """Run gcovr --json-summary against cov_dir and return coverage metrics.
+
+    @param root Repository root Path.
+    @param cov_dir Coverage build directory Path.
+    @return Parsed `gcovr` JSON summary dictionary.
+    """
+    gcov_exec = get_gcov_executable(cov_dir)
+    help_res = subprocess.run(
+        ["gcovr", "--help"], cwd=str(root), capture_output=True, text=True
+    )
+    has_ignore_errors = "--gcov-ignore-errors" in (help_res.stdout or "")
+
     with tempfile.TemporaryDirectory(prefix="fortran_orm_gcovr_") as tmp:
         summary_json = Path(tmp) / "summary.json"
         cmd = [
@@ -96,23 +153,32 @@ def collect_c_coverage(root, cov_dir):
             gcov_exec,
             "-r",
             str(root),
-            "--gcov-ignore-errors=all",
-            "--gcov-ignore-parse-errors=all",
-            "--exclude-unreachable-branches",
-            "--exclude-throw-branches",
-            "--filter",
-            r"src/.*\.c",
-            "--json-summary",
-            str(summary_json),
-            str(cov_dir),
         ]
+        if has_ignore_errors:
+            cmd.append("--gcov-ignore-errors=all")
+        cmd.extend(
+            [
+                "--gcov-ignore-parse-errors=all",
+                "--exclude-unreachable-branches",
+                "--exclude-throw-branches",
+                "--filter",
+                r"src/.*\.c",
+                "--json-summary",
+                str(summary_json),
+                str(cov_dir),
+            ]
+        )
         subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, check=True)
         data = json.loads(summary_json.read_text(encoding="utf-8"))
     return data
 
 
-def write_undercovered_md(root, data):
-    """Write UNDERCOVERED.md with per-file and overall C89 + 12-era Fortran metrics."""
+def find_undercovered_files(data):
+    """Return sorted list of files with <100% function, line, or branch coverage.
+
+    @param data Parsed `gcovr` JSON summary dictionary.
+    @return Tuple `(files, undercovered)` of all file dicts and undercovered dicts.
+    """
     files = sorted(data.get("files", []), key=lambda f: f["filename"])
     undercovered = [
         f
@@ -121,6 +187,20 @@ def write_undercovered_md(root, data):
         or f["function_covered"] < f["function_total"]
         or (f["branch_total"] and f["branch_covered"] < f["branch_total"])
     ]
+    return files, undercovered
+
+
+def write_undercovered_md(root, data, write_file=True):
+    """Format (and optionally write) UNDERCOVERED.md from live coverage metrics.
+
+    @param root Repository root Path.
+    @param data Parsed `gcovr` JSON summary dictionary.
+    @param write_file When True, write `UNDERCOVERED.md` on disk.
+    @return True when 100.0% function, line, and branch coverage is achieved.
+    """
+    files, undercovered = find_undercovered_files(data)
+    if not files:
+        return False
 
     lines = [
         "# Undercovered Code Ledger",
@@ -157,7 +237,9 @@ def write_undercovered_md(root, data):
                 f"**Branches:** {f['branch_covered']}/{f['branch_total']}"
             )
 
-    lines.extend(["", "## Fully Covered Files (100.0% Function, Line & Branch Coverage)", ""])
+    lines.extend(
+        ["", "## Fully Covered Files (100.0% Function, Line & Branch Coverage)", ""]
+    )
     for f in files:
         if f not in undercovered:
             lines.append(
@@ -166,17 +248,26 @@ def write_undercovered_md(root, data):
                 f"**Branches:** {f['branch_covered']}/{f['branch_total']} (100.0%)"
             )
     lines.append("")
-    (root / "UNDERCOVERED.md").write_text("\n".join(lines), encoding="utf-8")
+    if write_file:
+        (root / "UNDERCOVERED.md").write_text("\n".join(lines), encoding="utf-8")
     return len(undercovered) == 0
 
 
 def main():
-    """CLI entry point for documentation and test coverage verification."""
+    """CLI entry point for documentation and test coverage verification.
+
+    @return Process exit status (`0` on 100% compliance, `1` otherwise).
+    """
     parser = argparse.ArgumentParser(
-        description="Verify 100% doc/test coverage and update UNDERCOVERED.md."
+        description="Verify full doc/test coverage and update UNDERCOVERED.md."
     )
     parser.add_argument(
-        "--doc", action="store_true", help="Run 100% C89 + Fortran doc coverage audit"
+        "--doc", action="store_true", help="Run 100%% C89 + Fortran doc coverage audit"
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify 100%% test coverage without rewriting UNDERCOVERED.md",
     )
     parser.add_argument("--root", default=".", help="Repository root directory")
     parser.add_argument(
@@ -198,7 +289,7 @@ def main():
         return 0
 
     data = collect_c_coverage(root, root / args.cov_dir)
-    ok = write_undercovered_md(root, data)
+    ok = write_undercovered_md(root, data, write_file=not args.check)
     if not ok:
         print(
             f"FAIL: C89 coverage below 100.0%: fn {data['function_covered']}/{data['function_total']}, "

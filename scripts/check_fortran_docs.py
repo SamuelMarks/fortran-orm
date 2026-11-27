@@ -107,7 +107,9 @@ def parse_free_doc_and_units(filepath, lines):
     if "@brief" not in full_head:
         missing.append(f"{filepath}:1: missing `!> @brief` header")
 
-    mod_re = re.compile(r"^\s*(MODULE|SUBMODULE)\s+(?!PROCEDURE\b)([A-Za-z0-9_() ]+)", re.IGNORECASE)
+    mod_re = re.compile(
+        r"^\s*(MODULE|SUBMODULE)\s+(?!PROCEDURE\b)([A-Za-z0-9_() ]+)", re.IGNORECASE
+    )
     type_re = re.compile(
         r"^\s*TYPE\s*(?:,\s*[A-Za-z0-9_()]+)*\s*::\s*([A-Za-z0-9_]+)|"
         r"^\s*TYPE\s+([A-Za-z0-9_]+)\s*$",
@@ -150,7 +152,9 @@ def parse_free_doc_and_units(filepath, lines):
         if re.match(r"^INTERFACE\s+[A-Za-z0-9_]+", stmt, re.IGNORECASE):
             in_interface_generic = True
             if not any("@brief" in d for d in pending_doc):
-                missing.append(f"{filepath}:{start_ln}: generic `{stmt}` missing `!> @brief`")
+                missing.append(
+                    f"{filepath}:{start_ln}: generic `{stmt}` missing `!> @brief`"
+                )
             pending_doc = []
             i += 1
             continue
@@ -167,7 +171,11 @@ def parse_free_doc_and_units(filepath, lines):
             continue
 
         m_type = type_re.match(stmt)
-        if m_type and not upper.startswith("TYPE(") and not upper.startswith("TYPE (*)"):
+        if (
+            m_type
+            and not upper.startswith("TYPE(")
+            and not upper.startswith("TYPE (*)")
+        ):
             tname = m_type.group(1) or m_type.group(2)
             doc = "\n".join(pending_doc)
             if "@brief" not in doc and "@type" not in doc:
@@ -186,10 +194,14 @@ def parse_free_doc_and_units(filepath, lines):
             doc = "\n".join(pending_doc)
             # Note: cdd-c generated INTERFACE blocks precede procedures with `!` comments
             if not doc:
-                missing.append(f"{filepath}:{start_ln}: procedure `{pname}` undocumented")
+                missing.append(
+                    f"{filepath}:{start_ln}: procedure `{pname}` undocumented"
+                )
             elif not filepath.startswith("generated/"):
                 if "@brief" not in doc:
-                    missing.append(f"{filepath}:{start_ln}: `{pname}` missing `!> @brief`")
+                    missing.append(
+                        f"{filepath}:{start_ln}: `{pname}` missing `!> @brief`"
+                    )
                 args = [a.strip() for a in args_raw.split(",") if a.strip()]
                 for arg in args:
                     if not re.search(
@@ -201,7 +213,9 @@ def parse_free_doc_and_units(filepath, lines):
                             f"{filepath}:{start_ln}: `{pname}` missing `!> @param {arg}`"
                         )
                 if kind == "FUNCTION" and "@return" not in doc:
-                    missing.append(f"{filepath}:{start_ln}: `{pname}` missing `!> @return`")
+                    missing.append(
+                        f"{filepath}:{start_ln}: `{pname}` missing `!> @return`"
+                    )
             pending_doc = []
             i += 1
             continue

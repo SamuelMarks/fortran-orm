@@ -107,3 +107,26 @@ Because 1957 FORTRAN (I) predated `SUBROUTINE` and `CALL`, `ICORMF` is invoked d
   900 STOP 1
       END
 ```
+
+---
+
+## 5. Complete Example Directory (`examples/`)
+
+All 16 runnable example applications are compiled automatically when `-DFORTRAN_ORM_BUILD_EXAMPLES=ON` (default) and executed by `ctest --test-dir build`:
+
+1. `examples/fortran_i_1957_telemetry.f` — **FORTRAN (I)** (1957) wind-tunnel Mach telemetry
+2. `examples/fortran_ii_1958_ballistics.f` — **FORTRAN II** (1958) `SUBROUTINE` & `COMMON /CORMCM/` ballistic range recorder
+3. `examples/fortran_iii_1958_reactor_scram.f` — **FORTRAN III** (1958–59) `ICORMB` boolean status/handle bitmask audit
+4. `examples/fortran_iv_1962_orbital_ephemeris.f` — **FORTRAN IV** (1962) `BLOCK DATA` & padded `6x3` orbital ephemeris matrix
+5. `examples/fortran66_steam_tables.f` — **FORTRAN 66** (1966) ASME saturated steam property tables & interpolation
+6. `examples/fortran77_ledger.f` — **FORTRAN 77** (1978) savepoint financial ledger
+7. `examples/fortran77_ast_seismic.f` — **FORTRAN 77** (1978) seismic arrival catalog, `NULL` columns, & 5-dialect AST
+8. `examples/fortran90_matrix_sim.f90` — **Fortran 90** (1991) 2D heat-equation mesh persistence
+9. `examples/fortran90_weather_stations.f90` — **Fortran 90** (1991) synoptic weather stations with generic `corm_f90_bind`/`corm_f90_col`
+10. `examples/fortran95_forall_cfd.f95` — **Fortran 95** (1997) `PURE`/`ELEMENTAL`/`FORALL` supersonic nozzle flow
+11. `examples/fortran2003_oop_models.f90` — **Fortran 2003** (2004) RAII `BIND(C)` model CRUD & JSON serialization
+12. `examples/fortran2003_pool_and_ast.f90` — **Fortran 2003** (2004) `orm_pool_t` connection pooling & multi-dialect `orm_ast_t`
+13. `examples/fortran2008_contiguous_nbody.f90` — **Fortran 2008** (2010) `SUBMODULE` & `CONTIGUOUS` zero-copy N-body checkpointing
+14. `examples/fortran2018_cfi_strided_stencil.f90` — **Fortran 2018** (2018) `CFI_cdesc_t` strided 1D/2D slices & `CHARACTER(LEN=*)`
+15. `examples/fortran2023_scientific_orm.f90` — **Fortran 2023** (2023) `F_C_STRING`, strided slices, UUID v4, & 38-digit decimals
+16. `examples/fortran2023_mainframe_ebcdic_decimal.f90` — **Fortran 2023** (2023) z/OS `EBCDIC`, exact decimal settlement, sharding, & OAuth2
