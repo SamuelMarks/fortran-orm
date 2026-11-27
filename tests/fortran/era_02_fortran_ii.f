@@ -1,12 +1,17 @@
 C @file era_02_fortran_ii.f
-C @brief End-to-end 1958 IBM FORTRAN II SUBROUTINE & COMMON test suite.
-C
-C Exercises F2OPEN, F2EXEC, F2PREP, F2BINI, F2BINA, F2STEP, F2COLI,
-C F2COLA, F2FINL, F2CLOS, and /CORMCM/ COMMON diagnostics using strict
-C 1958 FORTRAN II syntax (no LOGICAL, no DATA, no CHARACTER).
+C @brief End-to-end 1958 IBM FORTRAN II SUBROUTINE, COMMON, A1/A4
+C Hollerith, transaction, scalar, vector, and 2D matrix test suite.
       COMMON /CORMCM/ LASTEC, LASTDB, LASTST
-      DIMENSION IURL(8), IDDL(27), IINS(27), ISEL(19)
-      DIMENSION INAM(3), IOUT(8)
+      DOUBLE PRECISION DVEC(3), DQRY(3), DMAT(3, 2), DMQ(3, 2), DSCL
+      DOUBLE PRECISION DCV, DERR
+      DIMENSION IURL(8), IDDL(26), IINS(28), ISEL(20), ISUMQ(19)
+      DIMENSION IMDDL(20), IMINS(26), IMSEL(18), IBAD(7)
+      DIMENSION IVDDL(19), IVINS(24), IVSEL(16)
+      DIMENSION IDDDL(19), IDINS(24), IDSEL(16)
+      DIMENSION INAM(3), IOUT(8), ICPY(6), IHURL(2), IHDDL(5)
+      DIMENSION IHINS(6), IHSEL(5), IHTAG(1), IHOUT(2)
+      DIMENSION IVEC(3), IQRY(3)
+C ":memory:" in unpacked A1 ASCII codes
       IURL(1) = 58
       IURL(2) = 109
       IURL(3) = 101
@@ -15,14 +20,23 @@ C 1958 FORTRAN II syntax (no LOGICAL, no DATA, no CHARACTER).
       IURL(6) = 114
       IURL(7) = 121
       IURL(8) = 58
+      IBAD(1) = 66
+      IBAD(2) = 65
+      IBAD(3) = 68
+      IBAD(4) = 32
+      IBAD(5) = 83
+      IBAD(6) = 81
+      IBAD(7) = 76
       CALL F2OPEN(IURL, -1, IDB, IERR)
       IF (IERR) 5, 900, 5
-    5 CALL F2PREP(0, IURL, 8, IST, IERR)
+    5 IF (IF2OK(0)) 900, 6, 900
+    6 CALL F2PREP(0, IURL, 8, IST, IERR)
       IF (IERR) 8, 900, 8
     8 CALL F2OPEN(IURL, 8, IDB, IERR)
       IF (IERR) 900, 10, 900
-   10 IF (LASTDB - IDB) 900, 15, 900
-C "CREATE TABLE T2(K INT,S TEXT)" -> 29 chars: use "CREATE TABLE T2(K INT,S)" 24
+   10 IF (IF2OK(0) - 1) 900, 11, 900
+   11 IF (LASTDB - IDB) 900, 15, 900
+C "CREATE TABLE T2(K,S,D)" (22 chars)
    15 IDDL(1) = 67
       IDDL(2) = 82
       IDDL(3) = 69
@@ -40,17 +54,54 @@ C "CREATE TABLE T2(K INT,S TEXT)" -> 29 chars: use "CREATE TABLE T2(K INT,S)" 24
       IDDL(15) = 50
       IDDL(16) = 40
       IDDL(17) = 75
-      IDDL(18) = 32
-      IDDL(19) = 73
-      IDDL(20) = 78
-      IDDL(21) = 84
-      IDDL(22) = 44
-      IDDL(23) = 83
-      IDDL(24) = 41
-      CALL F2EXEC(IDB, IDDL, 24, IERR)
-      IF (IERR) 900, 20, 900
-C "INSERT INTO T2 VALUES(?,?)" (26 chars)
-   20 IINS(1) = 73
+      IDDL(18) = 44
+      IDDL(19) = 83
+      IDDL(20) = 44
+      IDDL(21) = 68
+      IDDL(22) = 41
+      CALL F2EXEC(IDB, IDDL, 22, IERR)
+      IF (IERR) 900, 16, 900
+C Verify empty-table defaults in F2SCAL & F2SCLD + bad DB error path
+   16 ISEL(1) = 83
+      ISEL(2) = 69
+      ISEL(3) = 76
+      ISEL(4) = 69
+      ISEL(5) = 67
+      ISEL(6) = 84
+      ISEL(7) = 32
+      ISEL(8) = 75
+      ISEL(9) = 44
+      ISEL(10) = 83
+      ISEL(11) = 44
+      ISEL(12) = 68
+      ISEL(13) = 32
+      ISEL(14) = 70
+      ISEL(15) = 82
+      ISEL(16) = 79
+      ISEL(17) = 77
+      ISEL(18) = 32
+      ISEL(19) = 84
+      ISEL(20) = 50
+      CALL F2SCAL(0, ISEL, 20, 99, ISCV, IERR)
+      IF (IERR) 17, 900, 17
+   17 CALL F2SCAL(IDB, ISEL, 20, 99, ISCV, IERR)
+      IF (IERR) 900, 18, 900
+   18 IF (ISCV - 99) 900, 19, 900
+   19 CALL F2SCLD(0, ISEL, 20, 4.5D0, DSCL, IERR)
+      IF (IERR) 21, 900, 21
+   21 CALL F2SCLD(IDB, ISEL, 20, 4.5D0, DSCL, IERR)
+      IF (IERR) 900, 22, 900
+   22 DERR = DSCL - 4.5D0
+      IF (DERR * DERR - 1.0D-16) 23, 23, 900
+C Transactions + F2BINI, F2BINA, F2BIND, F2RWID
+   23 CALL F2TXBG(IDB, IERR)
+      IF (IERR) 900, 24, 900
+   24 CALL F2TXRB(IDB, IERR)
+      IF (IERR) 900, 26, 900
+   26 CALL F2TXBG(IDB, IERR)
+      IF (IERR) 900, 27, 900
+C "INSERT INTO T2 VALUES(?,?,?)" (28 chars)
+   27 IINS(1) = 73
       IINS(2) = 78
       IINS(3) = 83
       IINS(4) = 69
@@ -75,40 +126,30 @@ C "INSERT INTO T2 VALUES(?,?)" (26 chars)
       IINS(23) = 63
       IINS(24) = 44
       IINS(25) = 63
-      IINS(26) = 41
-      CALL F2PREP(IDB, IINS, 26, IST, IERR)
-      IF (IERR) 900, 25, 900
-   25 CALL F2BINI(IST, 1, 77, IERR)
+      IINS(26) = 44
+      IINS(27) = 63
+      IINS(28) = 41
+      CALL F2PREP(IDB, IINS, 28, IST, IERR)
+      IF (IERR) 900, 28, 900
+   28 CALL F2BINI(IST, 1, 77, IERR)
       IF (IERR) 900, 30, 900
    30 INAM(1) = 73
       INAM(2) = 66
       INAM(3) = 77
       CALL F2BINA(IST, 2, INAM, 3, IERR)
+      IF (IERR) 900, 32, 900
+   32 CALL F2BIND(IST, 3, 19.58D0, IERR)
       IF (IERR) 900, 35, 900
    35 CALL F2STEP(IST, IHAS, IERR)
       IF (IERR) 900, 40, 900
    40 CALL F2FINL(IST, IERR)
-      IF (IERR) 900, 45, 900
-C "SELECT K,S FROM T2" (18 chars)
-   45 ISEL(1) = 83
-      ISEL(2) = 69
-      ISEL(3) = 76
-      ISEL(4) = 69
-      ISEL(5) = 67
-      ISEL(6) = 84
-      ISEL(7) = 32
-      ISEL(8) = 75
-      ISEL(9) = 44
-      ISEL(10) = 83
-      ISEL(11) = 32
-      ISEL(12) = 70
-      ISEL(13) = 82
-      ISEL(14) = 79
-      ISEL(15) = 77
-      ISEL(16) = 32
-      ISEL(17) = 84
-      ISEL(18) = 50
-      CALL F2PREP(IDB, ISEL, 18, IST, IERR)
+      IF (IERR) 900, 42, 900
+   42 CALL F2TXCM(IDB, IERR)
+      IF (IERR) 900, 44, 900
+   44 CALL F2RWID(IDB, IRWID, IERR)
+      IF (IERR) 900, 46, 900
+   46 IF (IRWID - 1) 900, 48, 900
+   48 CALL F2PREP(IDB, ISEL, 20, IST, IERR)
       IF (IERR) 900, 50, 900
    50 CALL F2STEP(IST, IHAS, IERR)
       IF (IERR) 900, 55, 900
@@ -118,14 +159,223 @@ C "SELECT K,S FROM T2" (18 chars)
    65 IF (IK - 77) 900, 70, 900
    70 CALL F2COLA(IST, 2, IOUT, 8, ILEN, IERR)
       IF (IERR) 900, 75, 900
-   75 IF (ILEN - 3) 900, 80, 900
-   80 IF (IOUT(1) - 73) 900, 82, 900
-   82 CALL F2FINL(IST, IERR)
-      IF (IERR) 900, 85, 900
-   85 CALL F2CLOS(IDB, IERR)
-      IF (IERR) 900, 88, 900
-   88 WRITE (6, 100) IK
-  100 FORMAT (I6)
+   75 IF (ILEN - 3) 900, 76, 900
+   76 CALL F2COLD(IST, 3, DCV, IERR)
+      IF (IERR) 900, 77, 900
+   77 DERR = DCV - 19.58D0
+      IF (DERR * DERR - 1.0D-16) 78, 78, 900
+   78 CALL F2FINL(IST, IERR)
+      IF (IERR) 900, 79, 900
+C Test F2SCAL & F2SCLD on populated table: "SELECT D FROM T2" (16)
+   79 CALL F2SCAL(IDB, ISEL, 20, 0, ISCV, IERR)
+      IF (IERR) 900, 80, 900
+   80 IF (ISCV - 77) 900, 81, 900
+   81 ISUMQ(1) = 83
+      ISUMQ(2) = 69
+      ISUMQ(3) = 76
+      ISUMQ(4) = 69
+      ISUMQ(5) = 67
+      ISUMQ(6) = 84
+      ISUMQ(7) = 32
+      ISUMQ(8) = 68
+      ISUMQ(9) = 32
+      ISUMQ(10) = 70
+      ISUMQ(11) = 82
+      ISUMQ(12) = 79
+      ISUMQ(13) = 77
+      ISUMQ(14) = 32
+      ISUMQ(15) = 84
+      ISUMQ(16) = 50
+      CALL F2SCLD(IDB, ISUMQ, 16, 0.0D0, DSCL, IERR)
+      IF (IERR) 900, 82, 900
+   82 DERR = DSCL - 19.58D0
+      IF (DERR * DERR - 1.0D-16) 83, 83, 900
+C Test A1 utilities F2A1CP and IF2AEQ
+   83 CALL F2A1CP(INAM, 3, ICPY, 0)
+      CALL F2A1CP(INAM, 3, ICPY, 6)
+      IF (IF2AEQ(INAM, ICPY, 0) - 1) 900, 84, 900
+   84 IF (IF2AEQ(INAM, ICPY, 3) - 1) 900, 85, 900
+   85 ICPY(2) = 90
+      IF (IF2AEQ(INAM, ICPY, 3)) 900, 86, 900
+C Test 1D INTEGER & DOUBLE vectors: "CREATE TABLE V2(X)" (18)
+   86 IVDDL(1) = 67
+      IVDDL(2) = 82
+      IVDDL(3) = 69
+      IVDDL(4) = 65
+      IVDDL(5) = 84
+      IVDDL(6) = 69
+      IVDDL(7) = 32
+      IVDDL(8) = 84
+      IVDDL(9) = 65
+      IVDDL(10) = 66
+      IVDDL(11) = 76
+      IVDDL(12) = 69
+      IVDDL(13) = 32
+      IVDDL(14) = 86
+      IVDDL(15) = 50
+      IVDDL(16) = 40
+      IVDDL(17) = 88
+      IVDDL(18) = 41
+      CALL F2EXEC(IDB, IVDDL, 18, IERR)
+      IF (IERR) 900, 87, 900
+C "INSERT INTO V2 VALUES(?)" (24) & "SELECT X FROM V2" (16)
+   87 DO 88 J = 1, 12
+      IVINS(J) = IINS(J)
+   88 CONTINUE
+      IVINS(13) = 86
+      IVINS(14) = 50
+      DO 89 J = 15, 23
+      IVINS(J) = IINS(J)
+   89 CONTINUE
+      IVINS(24) = 41
+      DO 91 J = 1, 7
+      IVSEL(J) = ISUMQ(J)
+   91 CONTINUE
+      IVSEL(8) = 88
+      DO 92 J = 9, 14
+      IVSEL(J) = ISUMQ(J)
+   92 CONTINUE
+      IVSEL(15) = 86
+      IVSEL(16) = 50
+      IVEC(1) = 10
+      IVEC(2) = 20
+      IVEC(3) = 30
+      CALL F2VECI(IDB, IVINS, 24, IVEC, 0, IERR)
+      IF (IERR) 900, 93, 900
+   93 CALL F2VECI(0, IVINS, 24, IVEC, 3, IERR)
+      IF (IERR) 94, 900, 94
+   94 CALL F2VECI(IDB, IBAD, 7, IVEC, 3, IERR)
+      IF (IERR) 95, 900, 95
+   95 CALL F2VECI(IDB, IVINS, 24, IVEC, 3, IERR)
+      IF (IERR) 900, 96, 900
+   96 CALL F2QRYI(0, IVSEL, 16, IQRY, 3, NOUT, IERR)
+      IF (IERR) 97, 900, 97
+   97 CALL F2QRYI(IDB, IVSEL, 16, IQRY, 2, NOUT, IERR)
+      IF (IERR - 34) 900, 98, 900
+   98 CALL F2QRYI(IDB, IVSEL, 16, IQRY, 3, NOUT, IERR)
+      IF (IERR) 900, 99, 900
+   99 IF (NOUT - 3) 900, 101, 900
+  101 IF (IQRY(3) - 30) 900, 102, 900
+C 1D DOUBLE PRECISION vector table "W2(X)"
+  102 DO 103 J = 1, 18
+      IDDDL(J) = IVDDL(J)
+  103 CONTINUE
+      IDDDL(14) = 87
+      DO 104 J = 1, 24
+      IDINS(J) = IVINS(J)
+  104 CONTINUE
+      IDINS(13) = 87
+      DO 105 J = 1, 16
+      IDSEL(J) = IVSEL(J)
+  105 CONTINUE
+      IDSEL(15) = 87
+      CALL F2EXEC(IDB, IDDDL, 18, IERR)
+      IF (IERR) 900, 106, 900
+  106 DVEC(1) = 1.25D0
+      DVEC(2) = 2.50D0
+      DVEC(3) = 3.75D0
+      CALL F2VECD(IDB, IDINS, 24, DVEC, 0, IERR)
+      IF (IERR) 900, 107, 900
+  107 CALL F2VECD(0, IDINS, 24, DVEC, 3, IERR)
+      IF (IERR) 108, 900, 108
+  108 CALL F2VECD(IDB, IBAD, 7, DVEC, 3, IERR)
+      IF (IERR) 109, 900, 109
+  109 CALL F2VECD(IDB, IDINS, 24, DVEC, 3, IERR)
+      IF (IERR) 900, 110, 900
+  110 CALL F2QRYD(0, IDSEL, 16, DQRY, 3, NOUT, IERR)
+      IF (IERR) 111, 900, 111
+  111 CALL F2QRYD(IDB, IDSEL, 16, DQRY, 2, NOUT, IERR)
+      IF (IERR - 34) 900, 112, 900
+  112 CALL F2QRYD(IDB, IDSEL, 16, DQRY, 3, NOUT, IERR)
+      IF (IERR) 900, 113, 900
+  113 DERR = DQRY(3) - 3.75D0
+      IF (DERR * DERR - 1.0D-16) 114, 114, 900
+C 2D Matrix in FORTRAN II: "CREATE TABLE M2(A,B)" (20)
+  114 DO 115 J = 1, 13
+      IMDDL(J) = IVDDL(J)
+  115 CONTINUE
+      IMDDL(14) = 77
+      IMDDL(15) = 50
+      IMDDL(16) = 40
+      IMDDL(17) = 65
+      IMDDL(18) = 44
+      IMDDL(19) = 66
+      IMDDL(20) = 41
+      CALL F2EXEC(IDB, IMDDL, 20, IERR)
+      IF (IERR) 900, 116, 900
+  116 DO 117 J = 1, 22
+      IMINS(J) = IVINS(J)
+  117 CONTINUE
+      IMINS(13) = 77
+      IMINS(23) = 63
+      IMINS(24) = 44
+      IMINS(25) = 63
+      IMINS(26) = 41
+      DO 118 J = 1, 7
+      IMSEL(J) = IVSEL(J)
+  118 CONTINUE
+      IMSEL(8) = 65
+      IMSEL(9) = 44
+      IMSEL(10) = 66
+      IMSEL(11) = 32
+      IMSEL(12) = 70
+      IMSEL(13) = 82
+      IMSEL(14) = 79
+      IMSEL(15) = 77
+      IMSEL(16) = 32
+      IMSEL(17) = 77
+      IMSEL(18) = 50
+      DMAT(1, 1) = 2.0D0
+      DMAT(2, 1) = 4.0D0
+      DMAT(3, 1) = 0.0D0
+      DMAT(1, 2) = 6.0D0
+      DMAT(2, 2) = 8.0D0
+      DMAT(3, 2) = 0.0D0
+      CALL F2MATI(IDB, IMINS, 26, DMAT, 3, 2, 2, IERR)
+      IF (IERR) 900, 119, 900
+  119 CALL F2MATQ(IDB, IMSEL, 18, DMQ, 3, 3, 2, NOUT, IERR)
+      IF (IERR) 900, 120, 900
+  120 IF (NOUT - 2) 900, 121, 900
+  121 DERR = DMQ(2, 2) - 8.0D0
+      IF (DERR * DERR - 1.0D-16) 122, 122, 900
+  122 CALL F2CLOS(IDB, IERR)
+      IF (IERR) 900, 125, 900
+C Packed A4 Hollerith suite F2PKA4, F2OPA4, F2EXA4, F2PRA4, F2BNA4, F2CLA4
+  125 CALL F2PKA4(IURL, 8, IHURL, 0)
+      CALL F2OPA4(IHURL, -1, IDBA, IERR)
+      IF (IERR) 126, 900, 126
+  126 CALL F2PKA4(IURL, 8, IHURL, 2)
+      CALL F2OPA4(IHURL, 8, IDBA, IERR)
+      IF (IERR) 900, 127, 900
+  127 CALL F2PKA4(IVDDL, 18, IHDDL, 5)
+      CALL F2EXA4(IDBA, IHDDL, 18, IERR)
+      IF (IERR) 900, 128, 900
+  128 CALL F2PRA4(0, IHDDL, 18, ISTA, IERR)
+      IF (IERR) 129, 900, 129
+  129 CALL F2PKA4(IVINS, 24, IHINS, 6)
+      CALL F2PRA4(IDBA, IHINS, 24, ISTA, IERR)
+      IF (IERR) 900, 130, 900
+  130 CALL F2PKA4(INAM, 3, IHTAG, 1)
+      CALL F2BNA4(ISTA, 1, IHTAG, 4, IERR)
+      IF (IERR) 900, 131, 900
+  131 CALL F2STEP(ISTA, IHAS, IERR)
+      IF (IERR) 900, 132, 900
+  132 CALL F2FINL(ISTA, IERR)
+      IF (IERR) 900, 133, 900
+  133 CALL F2PKA4(IVSEL, 16, IHSEL, 5)
+      CALL F2PRA4(IDBA, IHSEL, 16, ISTA, IERR)
+      IF (IERR) 900, 134, 900
+  134 CALL F2STEP(ISTA, IHAS, IERR)
+      IF (IERR) 900, 135, 900
+  135 CALL F2CLA4(ISTA, 1, IHOUT, 8, ILEN, IERR)
+      IF (IERR) 900, 136, 900
+  136 IF (ILEN - 3) 900, 137, 900
+  137 CALL F2FINL(ISTA, IERR)
+      IF (IERR) 900, 138, 900
+  138 CALL F2CLOS(IDBA, IERR)
+      IF (IERR) 900, 140, 900
+  140 WRITE (6, 200) IK
+  200 FORMAT (I6)
       STOP
   900 STOP 1
       END

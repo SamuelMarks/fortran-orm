@@ -138,6 +138,26 @@ endif()
 if(FORTRAN_ORM_ENABLE_ASAN AND NOT MSVC)
   list(APPEND FORTRAN_ORM_INSTR_COMPILE_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer -g)
   list(APPEND FORTRAN_ORM_INSTR_C_LINK_FLAGS -fsanitize=address,undefined)
+  if(APPLE AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    execute_process(
+      COMMAND "${CMAKE_C_COMPILER}" -print-resource-dir
+      OUTPUT_VARIABLE _asan_res_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    set(_asan_dar_dir "${_asan_res_dir}/lib/darwin")
+    if(EXISTS "${_asan_dar_dir}/libclang_rt.asan_osx_dynamic.dylib")
+      list(APPEND FORTRAN_ORM_INSTR_EXTRA_LIBS
+        "${_asan_dar_dir}/libclang_rt.asan_osx_dynamic.dylib"
+        "-Wl,-rpath,${_asan_dar_dir}"
+      )
+    endif()
+    if(EXISTS "${_asan_dar_dir}/libclang_rt.ubsan_osx_dynamic.dylib")
+      list(APPEND FORTRAN_ORM_INSTR_EXTRA_LIBS
+        "${_asan_dar_dir}/libclang_rt.ubsan_osx_dynamic.dylib"
+      )
+    endif()
+  endif()
 endif()
 
 set(FORTRAN_ORM_C_SOURCES
@@ -203,27 +223,52 @@ function(fortran_orm_add_mod_lib TARGET_NAME MOD_SUBDIR FLAGS_LIST)
 endfunction()
 
 # 2. Pre-90 Fixed-Form Subroutine Libraries (FORTRAN II, III, IV, 66, 77)
-fortran_orm_add_mod_lib(fortran_orm_f2  f2  "${FORTRAN_ORM_FIXED_FLAGS}" fortran/era/fortran_ii/cormf2.f)
-fortran_orm_add_mod_lib(fortran_orm_f3  f3  "${FORTRAN_ORM_FIXED_FLAGS}" fortran/era/fortran_iii/cormf3.f)
-fortran_orm_add_mod_lib(fortran_orm_f4  f4  "${FORTRAN_ORM_FIXED_FLAGS}" fortran/era/fortran_iv/cormf4.f)
-fortran_orm_add_mod_lib(fortran_orm_f66 f66 "${FORTRAN_ORM_FIXED_FLAGS}" fortran/era/fortran66/corm66_lib.f)
-fortran_orm_add_mod_lib(fortran_orm_f77 f77 "${FORTRAN_ORM_FIXED_FLAGS}" fortran/era/fortran77/corm77_lib.f)
+fortran_orm_add_mod_lib(fortran_orm_f2  f2  "${FORTRAN_ORM_FIXED_FLAGS}"
+  fortran/era/fortran_ii/cormf2.f
+  fortran/era/fortran_ii/corm2x.f
+)
+fortran_orm_add_mod_lib(fortran_orm_f3  f3  "${FORTRAN_ORM_FIXED_FLAGS}"
+  fortran/era/fortran_iii/cormf3.f
+  fortran/era/fortran_iii/corm3x.f
+)
+fortran_orm_add_mod_lib(fortran_orm_f4  f4  "${FORTRAN_ORM_FIXED_FLAGS}"
+  fortran/era/fortran_iv/cormf4.f
+  fortran/era/fortran_iv/corm4x.f
+)
+fortran_orm_add_mod_lib(fortran_orm_f66 f66 "${FORTRAN_ORM_FIXED_FLAGS}"
+  fortran/era/fortran66/corm66_lib.f
+  fortran/era/fortran66/corm66_ext.f
+)
+fortran_orm_add_mod_lib(fortran_orm_f77 f77 "${FORTRAN_ORM_FIXED_FLAGS}"
+  fortran/era/fortran77/corm77_lib.f
+  fortran/era/fortran77/corm77_orm.f
+)
 target_include_directories(fortran_orm_f77 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/fortran>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/fortran-orm>
 )
 
 # 3. Free-Form Module Libraries (Fortran 90, 95, cdd-c ISO_C_BINDING, 2003..2023)
-fortran_orm_add_mod_lib(fortran_orm_f90   f90   "${FORTRAN_ORM_F90_FLAGS}"   fortran/era/fortran90/fortran_orm_f90.f90)
-fortran_orm_add_mod_lib(fortran_orm_f95   f95   "${FORTRAN_ORM_F95_FLAGS}"   fortran/era/fortran95/fortran_orm_f95.f95)
+fortran_orm_add_mod_lib(fortran_orm_f90   f90   "${FORTRAN_ORM_F90_FLAGS}"
+  fortran/era/fortran90/fortran_orm_f90.f90
+  fortran/era/fortran90/fortran_orm_f90_orm.f90
+)
+fortran_orm_add_mod_lib(fortran_orm_f95   f95   "${FORTRAN_ORM_F95_FLAGS}"
+  fortran/era/fortran95/fortran_orm_f95.f95
+  fortran/era/fortran95/fortran_orm_f95_orm.f95
+)
 fortran_orm_add_mod_lib(fortran_orm_gen   gen   "${FORTRAN_ORM_F2003_FLAGS}" generated/fortran_orm_c.f90)
 
-fortran_orm_add_mod_lib(fortran_orm_f2003 f2003 "${FORTRAN_ORM_F2003_FLAGS}" fortran/era/fortran2003/fortran_orm_f2003.f90)
+fortran_orm_add_mod_lib(fortran_orm_f2003 f2003 "${FORTRAN_ORM_F2003_FLAGS}"
+  fortran/era/fortran2003/fortran_orm_f2003.f90
+  fortran/era/fortran2003/fortran_orm_f2003_ext.f90
+)
 target_link_libraries(fortran_orm_f2003 PUBLIC fortran_orm_gen)
 
 fortran_orm_add_mod_lib(fortran_orm_f2008 f2008 "${FORTRAN_ORM_F2008_FLAGS}"
   fortran/era/fortran2008/fortran_orm_f2008.f90
   fortran/era/fortran2008/fortran_orm_f2008_sub.f90
+  fortran/era/fortran2008/fortran_orm_f2008_ckpt_sub.f90
 )
 target_link_libraries(fortran_orm_f2008 PUBLIC fortran_orm_f2003)
 
@@ -325,34 +370,58 @@ if(FORTRAN_ORM_BUILD_EXAMPLES)
     endif()
   endfunction()
 
-  fortran_orm_add_example(fortran_i_1957_telemetry              examples/fortran_i_1957_telemetry.f               "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
-  fortran_orm_add_example(fortran_i_1957_census_tabulator       examples/fortran_i_1957_census_tabulator.f        "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
-  fortran_orm_add_example(fortran_ii_1958_ballistics            examples/fortran_ii_1958_ballistics.f             "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
-  fortran_orm_add_example(fortran_ii_1958_hydro_reservoir       examples/fortran_ii_1958_hydro_reservoir.f        "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
-  fortran_orm_add_example(fortran_iii_1958_reactor_scram        examples/fortran_iii_1958_reactor_scram.f         "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
-  fortran_orm_add_example(fortran_iii_1958_radar_track          examples/fortran_iii_1958_radar_track.f           "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
-  fortran_orm_add_example(fortran_iv_1962_orbital_ephemeris     examples/fortran_iv_1962_orbital_ephemeris.f      "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
-  fortran_orm_add_example(fortran_iv_1962_structural_truss      examples/fortran_iv_1962_structural_truss.f       "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
-  fortran_orm_add_example(fortran66_steam_tables                examples/fortran66_steam_tables.f                 "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
-  fortran_orm_add_example(fortran66_chemical_kinetics           examples/fortran66_chemical_kinetics.f            "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
-  fortran_orm_add_example(fortran77_ledger                      examples/fortran77_ledger.f                       "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
-  fortran_orm_add_example(fortran77_ast_seismic                 examples/fortran77_ast_seismic.f                  "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
-  fortran_orm_add_example(fortran77_ocean_hydrography           examples/fortran77_ocean_hydrography.f            "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
-  fortran_orm_add_example(fortran90_matrix_sim                  examples/fortran90_matrix_sim.f90                 "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
-  fortran_orm_add_example(fortran90_weather_stations            examples/fortran90_weather_stations.f90           "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
-  fortran_orm_add_example(fortran90_power_grid_dispatch         examples/fortran90_power_grid_dispatch.f90        "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
-  fortran_orm_add_example(fortran95_forall_cfd                  examples/fortran95_forall_cfd.f95                 "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
-  fortran_orm_add_example(fortran95_blackbody_planck            examples/fortran95_blackbody_planck.f95           "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
-  fortran_orm_add_example(fortran2003_oop_models                examples/fortran2003_oop_models.f90               "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
-  fortran_orm_add_example(fortran2003_pool_and_ast              examples/fortran2003_pool_and_ast.f90             "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
-  fortran_orm_add_example(fortran2003_spectroscopy_crud         examples/fortran2003_spectroscopy_crud.f90        "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
-  fortran_orm_add_example(fortran2008_contiguous_nbody          examples/fortran2008_contiguous_nbody.f90         "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
-  fortran_orm_add_example(fortran2008_kalman_navigation         examples/fortran2008_kalman_navigation.f90        "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
-  fortran_orm_add_example(fortran2018_cfi_strided_stencil       examples/fortran2018_cfi_strided_stencil.f90      "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
-  fortran_orm_add_example(fortran2018_acoustic_wavefield        examples/fortran2018_acoustic_wavefield.f90       "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
-  fortran_orm_add_example(fortran2023_scientific_orm            examples/fortran2023_scientific_orm.f90           "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
-  fortran_orm_add_example(fortran2023_mainframe_ebcdic_decimal  examples/fortran2023_mainframe_ebcdic_decimal.f90 "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
-  fortran_orm_add_example(fortran2023_isotope_decay_ledger      examples/fortran2023_isotope_decay_ledger.f90     "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
+  fortran_orm_add_example(fortran_i_1957_telemetry                  examples/fortran_i_1957_telemetry.f                   "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
+  fortran_orm_add_example(fortran_i_1957_census_tabulator           examples/fortran_i_1957_census_tabulator.f            "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
+  fortran_orm_add_example(fortran_i_1957_drum_inventory             examples/fortran_i_1957_drum_inventory.f              "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
+  fortran_orm_add_example(fortran_i_1957_cosmic_ray_hodoscope       examples/fortran_i_1957_cosmic_ray_hodoscope.f        "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_c")
+  fortran_orm_add_example(fortran_ii_1958_ballistics                examples/fortran_ii_1958_ballistics.f                 "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
+  fortran_orm_add_example(fortran_ii_1958_hydro_reservoir           examples/fortran_ii_1958_hydro_reservoir.f            "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
+  fortran_orm_add_example(fortran_ii_1958_naca_airfoil_polar        examples/fortran_ii_1958_naca_airfoil_polar.f         "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
+  fortran_orm_add_example(fortran_ii_1958_lunar_ranging_doppler     examples/fortran_ii_1958_lunar_ranging_doppler.f      "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f2")
+  fortran_orm_add_example(fortran_iii_1958_reactor_scram            examples/fortran_iii_1958_reactor_scram.f             "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
+  fortran_orm_add_example(fortran_iii_1958_radar_track              examples/fortran_iii_1958_radar_track.f               "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
+  fortran_orm_add_example(fortran_iii_1958_relay_switching_matrix   examples/fortran_iii_1958_relay_switching_matrix.f    "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
+  fortran_orm_add_example(fortran_iii_1958_magnet_coil_quench       examples/fortran_iii_1958_magnet_coil_quench.f        "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f3")
+  fortran_orm_add_example(fortran_iv_1962_orbital_ephemeris         examples/fortran_iv_1962_orbital_ephemeris.f          "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
+  fortran_orm_add_example(fortran_iv_1962_structural_truss          examples/fortran_iv_1962_structural_truss.f           "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
+  fortran_orm_add_example(fortran_iv_1962_apollo_guidance_burn      examples/fortran_iv_1962_apollo_guidance_burn.f       "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
+  fortran_orm_add_example(fortran_iv_1962_ac_power_loadflow         examples/fortran_iv_1962_ac_power_loadflow.f          "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f4")
+  fortran_orm_add_example(fortran66_steam_tables                    examples/fortran66_steam_tables.f                     "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
+  fortran_orm_add_example(fortran66_chemical_kinetics               examples/fortran66_chemical_kinetics.f                "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
+  fortran_orm_add_example(fortran66_geodetic_triangulation          examples/fortran66_geodetic_triangulation.f           "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
+  fortran_orm_add_example(fortran66_neutron_cross_section           examples/fortran66_neutron_cross_section.f            "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f66")
+  fortran_orm_add_example(fortran77_ledger                          examples/fortran77_ledger.f                           "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
+  fortran_orm_add_example(fortran77_ast_seismic                     examples/fortran77_ast_seismic.f                      "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
+  fortran_orm_add_example(fortran77_ocean_hydrography               examples/fortran77_ocean_hydrography.f                "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
+  fortran_orm_add_example(fortran77_atmospheric_radiosonde          examples/fortran77_atmospheric_radiosonde.f           "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
+  fortran_orm_add_example(fortran77_distillation_tray_column        examples/fortran77_distillation_tray_column.f         "${FORTRAN_ORM_FIXED_FLAGS}" "fortran_orm_f77")
+  fortran_orm_add_example(fortran90_matrix_sim                      examples/fortran90_matrix_sim.f90                     "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
+  fortran_orm_add_example(fortran90_weather_stations                examples/fortran90_weather_stations.f90               "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
+  fortran_orm_add_example(fortran90_power_grid_dispatch             examples/fortran90_power_grid_dispatch.f90            "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
+  fortran_orm_add_example(fortran90_finite_element_beam             examples/fortran90_finite_element_beam.f90            "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
+  fortran_orm_add_example(fortran90_epidemic_sir_compartment        examples/fortran90_epidemic_sir_compartment.f90       "${FORTRAN_ORM_F90_FLAGS}"   "fortran_orm_f90")
+  fortran_orm_add_example(fortran95_forall_cfd                      examples/fortran95_forall_cfd.f95                     "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
+  fortran_orm_add_example(fortran95_blackbody_planck                examples/fortran95_blackbody_planck.f95               "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
+  fortran_orm_add_example(fortran95_shallow_water_tsunami           examples/fortran95_shallow_water_tsunami.f95          "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
+  fortran_orm_add_example(fortran95_lattice_boltzmann_d2q9          examples/fortran95_lattice_boltzmann_d2q9.f95         "${FORTRAN_ORM_F95_FLAGS}"   "fortran_orm_f95")
+  fortran_orm_add_example(fortran2003_oop_models                    examples/fortran2003_oop_models.f90                   "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
+  fortran_orm_add_example(fortran2003_pool_and_ast                  examples/fortran2003_pool_and_ast.f90                 "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
+  fortran_orm_add_example(fortran2003_spectroscopy_crud             examples/fortran2003_spectroscopy_crud.f90            "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
+  fortran_orm_add_example(fortran2003_molecular_dynamics_lj         examples/fortran2003_molecular_dynamics_lj.f90        "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
+  fortran_orm_add_example(fortran2003_clinical_pharmacokinetics     examples/fortran2003_clinical_pharmacokinetics.f90    "${FORTRAN_ORM_F2003_FLAGS}" "fortran_orm_f2003")
+  fortran_orm_add_example(fortran2008_contiguous_nbody              examples/fortran2008_contiguous_nbody.f90             "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
+  fortran_orm_add_example(fortran2008_kalman_navigation             examples/fortran2008_kalman_navigation.f90            "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
+  fortran_orm_add_example(fortran2008_multigrid_poisson_ckpt        examples/fortran2008_multigrid_poisson_ckpt.f90       "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
+  fortran_orm_add_example(fortran2008_seismic_tomography_sparse     examples/fortran2008_seismic_tomography_sparse.f90    "${FORTRAN_ORM_F2008_FLAGS}" "fortran_orm_f2008")
+  fortran_orm_add_example(fortran2018_cfi_strided_stencil           examples/fortran2018_cfi_strided_stencil.f90          "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
+  fortran_orm_add_example(fortran2018_acoustic_wavefield            examples/fortran2018_acoustic_wavefield.f90           "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
+  fortran_orm_add_example(fortran2018_3d_heat_tensor_cfi            examples/fortran2018_3d_heat_tensor_cfi.f90           "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
+  fortran_orm_add_example(fortran2018_mhd_alfven_strided            examples/fortran2018_mhd_alfven_strided.f90           "${FORTRAN_ORM_F2018_FLAGS}" "fortran_orm_f2018")
+  fortran_orm_add_example(fortran2023_scientific_orm                examples/fortran2023_scientific_orm.f90               "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
+  fortran_orm_add_example(fortran2023_mainframe_ebcdic_decimal      examples/fortran2023_mainframe_ebcdic_decimal.f90     "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
+  fortran_orm_add_example(fortran2023_isotope_decay_ledger          examples/fortran2023_isotope_decay_ledger.f90         "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
+  fortran_orm_add_example(fortran2023_exoplanet_transit_dataframe   examples/fortran2023_exoplanet_transit_dataframe.f90  "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
+  fortran_orm_add_example(fortran2023_carbon_flux_unit_of_work      examples/fortran2023_carbon_flux_unit_of_work.f90     "${FORTRAN_ORM_F2023_FLAGS}" "fortran_orm_mod")
 endif()
 
 # 6. Install & pkg-config

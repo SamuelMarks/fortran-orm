@@ -21,3 +21,18 @@ All public C89 symbols are exported in `libfortran_orm` (`generated/fortran_orm_
 - `fortran_orm_cfi_col_str(stmt, col_idx, out_desc, out_len)`
 - `fortran_orm_cfi_insert_numeric(db, sql_desc, arr_desc)`
 - `fortran_orm_cfi_query_numeric(db, sql_desc, out_arr_desc, out_rows)`
+
+## 3. High-Level Fortran Era Abstractions (`fortran/`)
+
+- **FORTRAN I–66 (`fortran/era/fortran_i..fortran66/`)**:
+  - `ICORMF` (1957 FORTRAN I integer dispatcher), `F2OPEN..F2MATQ` & `F2OPA4..IF2OK` (`cormf2.f`, `corm2x.f`), `F3OPEN..F3MATQ` & `IF3BIT`/`IF3ALL` (`cormf3.f`, `corm3x.f`), `F4OPEN..DF4NRM` & `LF4LIV` (`cormf4.f`, `corm4x.f`), `C6OPEN..C6I2A1` (`corm66_lib.f`, `corm66_ext.f`).
+- **FORTRAN 77 (`fortran/era/fortran77/corm77_{lib,orm}.f`)**:
+  - `F7OPEN..F7MATQ`, scalar queries (`F7QINT`, `F7QDBL`, `F7QCHR`), repositories (`F7CNT`, `F7EXST`, `F7DELI`), Key-Value store (`F7KVCR`, `F7KVPT`, `F7KVGT`), savepoint-guarded vectors (`F7VECD`, `F7QRYD`), and AST renderer (`F7ASAL`).
+- **Fortran 90 & 95 (`fortran_orm_f90_orm`, `fortran_orm_f95_orm`)**:
+  - Fluent query builder `corm_query_f90_t`, Key-Value store `corm_kv_f90_t`, time-series ledger `corm_ts_f90_t`, generic `corm_f90_insert_vec`/`corm_f90_query_vec`; `PURE`/`ELEMENTAL` kernels, `FORALL` affine/masked matrices, and 2D mesh checkpoint handle `corm_grid2d_f95`.
+- **Fortran 2003 (`fortran_orm_f2003`, `fortran_orm_f2003_ext`)**:
+  - RAII OOP `orm_db_t`, `orm_stmt_t` (generic `bind`/`col`), `orm_pool_t`, `orm_rs_t`, `orm_ast_t`, `orm_schema_t`, `orm_tx_guard_t`, `orm_decimal_t`, `orm_migration_t`, `orm_shard_router_t`, `orm_oauth2_store_t`, `ABSTRACT` `orm_model_base_t`, and EBCDIC/UTF-16/A1 codecs.
+- **Fortran 2008 (`fortran_orm_f2008` + `SUBMODULE`s)**:
+  - Generic `CONTIGUOUS` `corm_f2008_insert_vec`/`corm_f2008_query_vec` (`INT32`, `INT64`, `REAL64`), padded submatrices, `DO CONCURRENT` `corm_f2008_zscore_cols`, and `orm_checkpoint_f2008_t`.
+- **Fortran 2018 & 2023 (`fortran_orm_f2018`, `fortran_orm_f2023`, `fortran_orm`)**:
+  - `SELECT RANK` Rank 0..3 volumetric tensor persistence (`corm_f2018_save_tensor_f64`, `corm_f2018_load_tensor_f64`), `F_C_STRING` connection/exec, 38-digit decimal canonical string suite (`corm_f2023_dec_{add,sub,mul,div,cmp,rescale}_str`), `orm_dataframe_f2023_t`, and `orm_session_f2023_t`.

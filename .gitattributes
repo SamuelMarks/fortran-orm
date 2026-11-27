@@ -7,7 +7,7 @@
 *.f77 text eol=lf
 *.f90 text eol=lf
 *.f95 text eol=lf
-*.inc text eol=lf
+*.inc text eol=lf linguist-language=Fortran
 *.cmake text eol=lf
 CMakeLists.txt text eol=lf
 *.sh text eol=lf
